@@ -67,9 +67,8 @@ def test_build_messages_with_no_chunks_still_includes_question():
 
 
 def test_citation_deduplication():
-    """The chat layer dedupes (filename, page) — two chunks from the same page
-    collapse to one citation. Each citation now also carries an excerpt of the
-    most-relevant chunk for that page (Feature 2: hoverable citations)."""
+    """_dedupe_citations collapses (filename, page) for the CHIPS list (one per
+    page, not one per chunk). Each chip carries the most-relevant chunk's excerpt."""
     from app.services.chat import _dedupe_citations
 
     chunks = [
@@ -89,3 +88,26 @@ def test_citation_deduplication():
     assert deduped[0]["excerpt"] == "a cats passage"
     assert deduped[1]["excerpt"] == "c cats page two"
     assert deduped[2]["excerpt"] == "d other doc"
+
+
+def test_chunk_citations_one_per_chunk():
+    """_chunk_citations is 1:1 with retrieved chunks — what inline [n] markers
+    index. CRITICAL: it must NOT dedupe, or [n] lookups break on single-page
+    docs where every chunk shares (filename, page)."""
+    from app.services.chat import _chunk_citations
+
+    chunks = [
+        RetrievedChunk(chunk_id=1, content="first passage", page_number=1, filename="x.pdf", document_id=1, distance=0.1),
+        RetrievedChunk(chunk_id=2, content="second passage", page_number=1, filename="x.pdf", document_id=1, distance=0.2),
+        RetrievedChunk(chunk_id=3, content="third passage", page_number=1, filename="x.pdf", document_id=1, distance=0.3),
+    ]
+    out = _chunk_citations(chunks)
+    # One entry per chunk, same order — even though all share (x.pdf, p.1).
+    assert len(out) == 3
+    assert [c["excerpt"] for c in out] == [
+        "first passage",
+        "second passage",
+        "third passage",
+    ]
+    # So [1]->out[0], [2]->out[1], [3]->out[2] all resolve. This is the
+    # invariant the frontend's inline-citation hover depends on.

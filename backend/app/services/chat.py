@@ -36,7 +36,12 @@ class TokenEvent:
 
 @dataclass(slots=True)
 class DoneEvent:
-    citations: list[dict[str, object]]  # [{"filename":..., "page_number":...}]
+    # One entry PER RETRIEVED CHUNK, in prompt order ([1] -> index 0). This is
+    # what the inline [n] markers index, so it MUST be 1:1 with the excerpts the
+    # model saw — no deduping here, or [n] lookups break (e.g. a single-page doc
+    # where every chunk shares (filename, page) would collapse to one entry and
+    # [2]/[3] would have no match).
+    citations: list[dict[str, object]]
     # True when the answer was a canned decline (no LLM was called). Lets the
     # frontend distinguish "model said it couldn't find X" from "retrieval said
     # so" — not strictly required by the spec but cheap to expose.
@@ -98,7 +103,11 @@ async def stream_chat(
 
     # Branch 3: build the prompt and stream the real answer.
     messages = prompting.build_messages(question, chunks)
-    citations = _dedupe_citations(chunks)
+    # One citation per retrieved chunk, in the SAME ORDER as the prompt's
+    # numbered excerpts — so the model's [n] maps 1:1 to citations[n-1]. Do NOT
+    # dedupe here: deduping by (filename, page) breaks inline [n] lookups when
+    # multiple chunks share a page (single-page docs would collapse to 1 entry).
+    citations = _chunk_citations(chunks)
 
     try:
         # stream_answer is a SYNC iterator (OpenAI SDK). Pump it through a
@@ -169,16 +178,49 @@ class _Sentinel:
     exc: BaseException
 
 
+def _chunk_citations(
+    chunks: list[retrieval.RetrievedChunk],
+) -> list[dict[str, object]]:
+    """Build ONE citation per retrieved chunk, in prompt order.
+
+    This is the array the frontend's inline ``[n]`` markers index: the model's
+    ``[1]`` -> ``citations[0]``, ``[3]`` -> ``citations[2]``, etc. It MUST stay
+    1:1 with the numbered excerpts in the prompt (same ``chunks`` list, same
+    order), or ``[n]`` lookups break. Do NOT dedupe here — see the note on
+    DoneEvent.citations.
+
+    Each entry carries the chunk's own ``excerpt`` so hover popups show the
+    exact passage the model drew that citation from.
+    """
+    out: list[dict[str, object]] = []
+    for c in chunks:
+        excerpt = c.content.strip()
+        if len(excerpt) > 320:
+            excerpt = excerpt[:320].rstrip() + "…"
+        out.append(
+            {
+                "filename": c.filename,
+                "page_number": c.page_number,
+                "excerpt": excerpt,
+            }
+        )
+    return out
+
+
 def _dedupe_citations(
     chunks: list[retrieval.RetrievedChunk],
 ) -> list[dict[str, object]]:
     """De-duplicate (filename, page_number) across retrieved chunks, in
-    retrieval order (most relevant first). docs/04 /api/chat done event.
+    retrieval order (most relevant first). Used for the chips below the answer
+    (one per page, not one per chunk) to avoid showing "p.1, p.1, p.1".
+
+    NOTE: do NOT use this for inline-[n] lookup — that needs the per-chunk list
+    from ``_chunk_citations``. See DoneEvent.citations.
 
     Each citation carries the highest-ranked chunk's ``excerpt`` so the frontend
-    can show a NotebookLM-style hover popup with the actual source passage — not
-    just "filename, page". Retrieval returns chunks in ascending-distance order,
-    so the first time we see a (filename, page) is its most-relevant chunk."""
+    can show a hover popup with the actual source passage. Retrieval returns
+    chunks in ascending-distance order, so the first time we see a
+    (filename, page) is its most-relevant chunk."""
     seen: set[tuple[str, int | None]] = set()
     out: list[dict[str, object]] = []
     for c in chunks:
@@ -186,8 +228,6 @@ def _dedupe_citations(
         if key in seen:
             continue
         seen.add(key)
-        # Truncate the excerpt so the done-event JSON stays small but still
-        # gives the user a meaningful passage on hover.
         excerpt = c.content.strip()
         if len(excerpt) > 320:
             excerpt = excerpt[:320].rstrip() + "…"
