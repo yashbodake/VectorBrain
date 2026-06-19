@@ -14,8 +14,16 @@ from app.services.retrieval import RetrievedChunk
 
 SYSTEM_PROMPT = """You are a study assistant. Answer the user's question using ONLY the document excerpts provided below.
 If the excerpts don't contain enough information to answer, say so directly — do not guess or use outside knowledge.
-Always ground your answer in the excerpts; the user will see citations alongside your answer, so don't repeat
-"according to the document" type phrasing excessively — just answer naturally and accurately."""
+
+CITATION FORMAT (important): each excerpt is numbered [1], [2], .... When you
+use information from an excerpt, cite it inline using a plain bracketed number
+such as [1] or [1][3]. Use ONLY a plain number in brackets — never add line
+ranges, dagger symbols, or any other decoration (do NOT write [1†L1-L4],
+【1】, or similar). The frontend turns [n] into a hoverable citation, so the
+format must be exactly [n].
+
+Answer naturally and accurately; don't overuse "according to the document"
+phrasing. You may use markdown (bold, italics, bullet lists) for readability."""
 
 
 def build_excerpt_label(idx: int, chunk: RetrievedChunk) -> str:
