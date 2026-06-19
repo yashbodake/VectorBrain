@@ -1,0 +1,25 @@
+# Local development database for VectorBrain.
+# Uses the official pgvector image (PostgreSQL 16 + pgvector extension).
+# Port 5433 on the host so it does NOT clash with the existing local
+# Postgres 12 cluster running on 5432.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: vectorbrain-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vectorbrain
+      POSTGRES_PASSWORD: vectorbrain
+      POSTGRES_DB: vectorbrain
+    ports:
+      - "5433:5432"
+    volumes:
+      - vectorbrain_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vectorbrain -d vectorbrain"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  vectorbrain_pgdata:

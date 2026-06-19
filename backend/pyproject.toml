@@ -1,0 +1,74 @@
+[project]
+name = "vectorbrain-backend"
+version = "0.1.0"
+description = "VectorBrain — multi-document RAG second-brain study tool (FastAPI backend)."
+requires-python = ">=3.11"
+
+dependencies = [
+    # --- Web framework ---
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "python-multipart>=0.0.9",      # for multipart/form-data file uploads
+
+    # --- DB ---
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",                 # async PostgreSQL driver (matches +asyncpg in DATABASE_URL)
+    "alembic>=1.13",                 # migrations (per docs/03-database-schema.md)
+    "pgvector>=0.2.4",               # pgvector SQLAlchemy/asyncpg integration + ORM Vector type
+
+    # --- Config ---
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+
+    # --- HTTP client (Groq calls land in Phase 3, but httpx is also handy for tests) ---
+    "httpx>=0.27",
+
+    # --- LLM client (Phase 3). Cerebras exposes an OpenAI-compatible API, so we
+    # use the official `openai` SDK pointed at CEREBRAS_BASE_URL. Originally the
+    # spec called for Groq — see PROGRESS.md "Spec Deviations".
+    "openai>=1.40",
+
+    # --- Ingestion pipeline (Phase 2) ---
+    "docling>=2.16",                       # structure-aware PDF parsing (page boundaries)
+    "sentence-transformers>=3.0",          # local bge-small-en-v1.5 inference
+    "anyio>=4.3",                          # run_sync worker-thread offload for blocking models
+    "numpy>=1.26",
+
+    # --- Torch + torchvision: MUST be installed as a matched CPU pair from the
+    # PyTorch index, and torchvision's ABI must match torch exactly, or you get
+    # "RuntimeError: operator torchvision::nms does not exist" at import time.
+    # Install with:
+    #   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+    "torch>=2.7",
+    "torchvision>=0.22",
+
+    # --- transformers: docling 2.x imports AutoProcessor/AutoModelForImageTextToText
+    # which were removed/renamed in transformers 5.x. Pin to <5 until docling
+    # supports v5.
+    "transformers>=4.41,<5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "anyio>=4.3",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# All tests + fixtures share ONE event loop. asyncpg binds each connection to
+# the loop that created it — per-test loops let connection pools from
+# background ingestion code outlive their loop and raise 'Event loop is
+# closed' on the next test. Both test AND fixture loop scopes are session.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]

@@ -1,0 +1,65 @@
+/* Global styles + CSS variables shared across components. The scaffolded Vite
+   demo CSS was replaced with a minimal app-wide baseline; component-specific
+   styling lives in each .vue file's scoped <style>. */
+
+:root {
+  /* Palette — referenced by components via var(--...), so they're themeable. */
+  --bg: #f5f6fa;
+  --text: #1f2533;
+  --muted: #6b7280;
+  --border: #e2e6ee;
+  --accent: #2563eb;
+  --accent-soft: #e7eefd;
+  --panel-bg: #fafbfd;
+  --chip-bg: #eef1f6;
+  --chip-border: #dde2eb;
+  --bubble-assistant: #f7f8fb;
+  --bubble-user: #2563eb;
+  --bubble-avatar: #f1f3f8;
+  --drop-bg: #fafbfd;
+  --drop-bg-active: #f0f5ff;
+  --status-color: #c4cad6;
+
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  color: var(--text);
+  background: var(--bg);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Subtle scrollbar styling so the dense doc list / chat thread look clean. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cfd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b6bdcc;
+}
