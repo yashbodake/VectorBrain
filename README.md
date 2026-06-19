@@ -1,5 +1,7 @@
 # VectorBrain
 
+> **Made with ♥ by [Yash Bodake](https://github.com/yashbodake)**
+
 A "second brain" study tool: upload multiple PDFs, ask questions, get answers grounded in the documents with page-level citations. Multi-document RAG over **PostgreSQL + pgvector**, **FastAPI**, **Docling**, **bge-small-en-v1.5**, and **Cerebras**.
 
 > **Status:** ✅ Lite build complete (Phases 1–5). See `PROGRESS.md`.
@@ -151,3 +153,13 @@ See `PROGRESS.md` → "Spec Deviations" for the full list. The notable ones:
 - **DB on port 5433** (local Postgres 12 occupies 5432 and is too old for pgvector).
 - **`transformers` pinned `<5`** (docling 2.x imports symbols removed in v5).
 - **Ingestion runs serialized** via FastAPI `BackgroundTasks` — the documented v1 scope; a task queue is the named future upgrade for concurrent large uploads.
+
+---
+
+## 👤 Author
+
+**Yash Bodake** — [GitHub @yashbodake](https://github.com/yashbodake) · [yashbodake4444@gmail.com](mailto:yashbodake4444@gmail.com)
+
+> Made with ♥ by **Yash Bodake**
+>
+> If you found this project useful, give it a ⭐ on [GitHub](https://github.com/yashbodake/VectorBrain)!
