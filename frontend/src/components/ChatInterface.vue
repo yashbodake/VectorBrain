@@ -2,7 +2,7 @@
 // Right panel: chat thread + input. Auto-scrolls to bottom on new content.
 // Send is disabled while no documents are ready OR while an answer is streaming.
 
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useChatStore } from '../stores/chat'
 import { useDocumentsStore } from '../stores/documents'
@@ -11,20 +11,38 @@ import MessageBubble from './MessageBubble.vue'
 const chat = useChatStore()
 const documents = useDocumentsStore()
 const { messages, isStreaming } = storeToRefs(chat)
+// Subscribe to the documents store reactively so any status change from the
+// DocumentManager's polling instantly re-enables/disables this composer.
+const { readyDocumentCount, selectedReadyIds } = storeToRefs(documents)
 
 const input = ref('')
 const threadEl = ref(null)
 
-const readyCount = computed(() => documents.readyDocumentCount)
+const readyCount = computed(() => readyDocumentCount.value)
+const selectedCount = computed(() => selectedReadyIds.value.length)
+// Allow typing only when at least one ready doc is selected (Feature 3 scope).
 const canSend = computed(
-  () => readyCount.value > 0 && !isStreaming.value && input.value.trim().length > 0,
+  () => readyCount.value > 0
+    && selectedCount.value > 0
+    && !isStreaming.value
+    && input.value.trim().length > 0,
 )
+
+// Make sure we have the latest document state on mount too — in case this
+// panel mounts before the DocumentManager has fetched (or after an HMR reload
+// that left the store empty). Belt-and-suspenders for the disabled-input case.
+onMounted(() => {
+  if (!documents.documents.length) documents.fetchDocuments()
+})
 
 const placeholder = computed(() => {
   if (readyCount.value === 0) {
     return 'Upload documents and wait for them to finish processing before asking…'
   }
-  return 'Ask a question across all documents…'
+  if (selectedCount.value === 0) {
+    return 'Select at least one document (checkbox on the left) to ask…'
+  }
+  return 'Ask a question across the selected documents…'
 })
 
 async function send() {
@@ -35,7 +53,10 @@ async function send() {
 }
 
 function onEnter(e) {
-  // Shift+Enter = newline; Enter = send.
+  // Only intercept the Enter key. Shift+Enter = newline (let it through).
+  // CRITICAL: without the key check this fires on EVERY keydown and
+  // preventDefault() eats every character the user types.
+  if (e.key !== 'Enter') return
   if (e.shiftKey) return
   e.preventDefault()
   send()
@@ -51,6 +72,12 @@ function scrollToBottom() {
   const el = threadEl.value
   if (el) el.scrollTop = el.scrollHeight
 }
+
+// DEBUG: surface the store state in the DOM so we can see WHY the input is
+// disabled. Remove once the issue is resolved.
+const debugDocs = computed(() => documents.documents)
+// (kept for potential future debugging; currently unused in template)
+void debugDocs
 </script>
 
 <template>
@@ -75,23 +102,31 @@ function scrollToBottom() {
     </div>
 
     <div class="composer">
-      <textarea
-        v-model="input"
-        class="input"
-        rows="1"
-        :placeholder="placeholder"
-        :disabled="readyCount === 0"
-        :title="readyCount === 0 ? 'No ready documents yet' : ''"
-        @keydown="onEnter"
-      />
-      <button
-        class="send-btn"
-        :disabled="!canSend"
-        :title="readyCount === 0 ? 'No ready documents yet' : 'Send'"
-        @click="send"
-      >
-        {{ isStreaming ? '…' : 'Send' }}
-      </button>
+      <!-- Scope hint (Feature 3): shows how many ready docs are in scope.
+           Visible only when there are ready docs to scope. -->
+      <div v-if="readyCount > 0" class="scope-hint">
+        Searching {{ selectedCount }} of {{ readyCount }} document{{ readyCount === 1 ? '' : 's' }}
+        <span v-if="selectedCount === 0" class="scope-warn">(select at least one to ask)</span>
+      </div>
+      <div class="composer-row">
+        <textarea
+          v-model="input"
+          class="input"
+          rows="1"
+          :placeholder="placeholder"
+          :disabled="selectedCount === 0"
+          :title="selectedCount === 0 ? 'Select at least one ready document' : ''"
+          @keydown="onEnter"
+        />
+        <button
+          class="send-btn"
+          :disabled="!canSend"
+          :title="selectedCount === 0 ? 'Select at least one ready document' : 'Send'"
+          @click="send"
+        >
+          {{ isStreaming ? '…' : 'Send' }}
+        </button>
+      </div>
     </div>
   </section>
 </template>
@@ -121,10 +156,23 @@ function scrollToBottom() {
 
 .composer {
   display: flex;
-  gap: 0.5rem;
-  align-items: flex-end;
+  flex-direction: column;
+  gap: 0.4rem;
   padding: 0.75rem 0 0;
   border-top: 1px solid var(--border, #e2e6ee);
+}
+.composer-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+.scope-hint {
+  font-size: 0.74rem;
+  color: var(--muted, #6b7280);
+}
+.scope-warn {
+  color: #b45309;
+  font-weight: 600;
 }
 .input {
   flex: 1;

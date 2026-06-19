@@ -64,15 +64,18 @@ _NO_MATCH_MSG = (
 
 
 async def stream_chat(
-    session: AsyncSession, question: str
+    session: AsyncSession, question: str, document_ids: list[int] | None = None
 ) -> AsyncIterator[ChatEvent]:
     """Run the full chat pipeline and yield events for the API layer to render.
+
+    ``document_ids`` optionally scopes retrieval to a subset of documents
+    (Feature 3). ``None``/empty means all ready documents.
 
     Never raises for expected conditions (no docs / no match) — those are
     normal ``DoneEvent``s with canned token messages. Provider failures come
     back as ``ErrorEvent``s so the SSE layer can emit an ``error`` SSE event.
     """
-    ready_count = await retrieval.count_ready_documents(session)
+    ready_count = await retrieval.count_ready_documents(session, document_ids)
     if ready_count == 0:
         # Branch 1: nothing to search. Decline without an LLM call.
         async for ev in _stream_decline(_NO_DOCS_MSG):
@@ -83,7 +86,9 @@ async def stream_chat(
     query_embedding = await anyio.to_thread.run_sync(
         embeddings.encode_query, question
     )
-    chunks = await retrieval.search_chunks(session, query_embedding.tolist())
+    chunks = await retrieval.search_chunks(
+        session, query_embedding.tolist(), document_ids=document_ids
+    )
     if not chunks:
         # Branch 2: nothing relevant above the threshold. Decline, skip the LLM
         # entirely (docs/04 — don't let it hallucinate from empty context).
@@ -168,7 +173,12 @@ def _dedupe_citations(
     chunks: list[retrieval.RetrievedChunk],
 ) -> list[dict[str, object]]:
     """De-duplicate (filename, page_number) across retrieved chunks, in
-    retrieval order (most relevant first). docs/04 /api/chat done event."""
+    retrieval order (most relevant first). docs/04 /api/chat done event.
+
+    Each citation carries the highest-ranked chunk's ``excerpt`` so the frontend
+    can show a NotebookLM-style hover popup with the actual source passage — not
+    just "filename, page". Retrieval returns chunks in ascending-distance order,
+    so the first time we see a (filename, page) is its most-relevant chunk."""
     seen: set[tuple[str, int | None]] = set()
     out: list[dict[str, object]] = []
     for c in chunks:
@@ -176,8 +186,17 @@ def _dedupe_citations(
         if key in seen:
             continue
         seen.add(key)
+        # Truncate the excerpt so the done-event JSON stays small but still
+        # gives the user a meaningful passage on hover.
+        excerpt = c.content.strip()
+        if len(excerpt) > 320:
+            excerpt = excerpt[:320].rstrip() + "…"
         out.append(
-            {"filename": c.filename, "page_number": c.page_number}
+            {
+                "filename": c.filename,
+                "page_number": c.page_number,
+                "excerpt": excerpt,
+            }
         )
     return out
 

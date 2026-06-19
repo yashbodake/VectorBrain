@@ -2,8 +2,13 @@
 // One document row. Shows filename, page count + size, a color-coded status
 // badge, and a delete button (with confirm). When status is 'failed', the
 // error message is shown (truncated; full text on hover via title).
+//
+// A scope checkbox (Feature 3) lets the user include/exclude this document
+// from chat queries. Only ready docs are selectable — the checkbox is hidden
+// while a doc is uploaded/processing/failed (can't search an un-ingested doc).
 
 import { computed, ref } from 'vue'
+import { useDocumentsStore } from '../stores/documents'
 
 const props = defineProps({
   document: { type: Object, required: true },
@@ -11,10 +16,18 @@ const props = defineProps({
 
 const emit = defineEmits(['delete'])
 
+const documents = useDocumentsStore()
+
 // Confirm step so a single misclick can't delete a document.
 const confirming = ref(false)
 
 const doc = computed(() => props.document)
+const isReady = computed(() => doc.value.status === 'ready')
+const isSelected = computed(() => isReady.value && documents.selected[doc.value.id] !== false)
+
+function onToggle() {
+  documents.toggleSelected(doc.value.id)
+}
 
 // "245 pages • 4.2 MB" — blank while page_count is null and status is
 // uploaded/processing (docs/06).
@@ -57,6 +70,18 @@ function resetConfirm() {
 
 <template>
   <div class="doc-card" :class="[`status-${doc.status}`]" @mouseleave="resetConfirm">
+    <!-- Scope checkbox (Feature 3). Only ready docs are selectable; the slot
+         stays present (with visibility:hidden) so layout doesn't shift while a
+         doc is still processing. -->
+    <input
+      type="checkbox"
+      class="scope-checkbox"
+      :checked="isSelected"
+      :disabled="!isReady"
+      :title="isReady ? 'Include this document in answers' : 'Document not ready'"
+      :style="{ visibility: isReady ? 'visible' : 'hidden' }"
+      @change="onToggle"
+    />
     <div class="doc-main">
       <div class="filename" :title="doc.filename">{{ doc.filename }}</div>
       <div class="meta">
@@ -105,6 +130,19 @@ function resetConfirm() {
 .doc-card.status-processing { --status-color: #d97706; }
 .doc-card.status-uploaded { --status-color: #d97706; }
 .doc-card.status-failed { --status-color: #dc2626; }
+
+.scope-checkbox {
+  flex: 0 0 auto;
+  margin-top: 0.2rem;
+  width: 1.05rem;
+  height: 1.05rem;
+  cursor: pointer;
+  accent-color: var(--accent, #2563eb);
+}
+.scope-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
 
 .doc-main {
   flex: 1;

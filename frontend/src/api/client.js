@@ -46,19 +46,26 @@ export async function deleteDocument(id) {
 //   onFinally()              — always, after the stream ends (any reason)
 //
 // Returns an AbortController so the caller can cancel a mid-stream answer.
-export function streamChat(question, handlers) {
+export function streamChat(question, handlers, documentIds = null) {
   const controller = new AbortController()
 
   ;(async () => {
     let resp
     try {
+      // Build the body. When documentIds is a non-empty array, include it to
+      // scope retrieval (Feature 3); omit it entirely otherwise so old
+      // backends / backward-compatible curl still work.
+      const body = { question }
+      if (Array.isArray(documentIds) && documentIds.length) {
+        body.document_ids = documentIds
+      }
       resp = await fetch(`${baseURL}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'text/event-stream',
         },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       })
     } catch (err) {

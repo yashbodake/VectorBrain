@@ -44,26 +44,49 @@ export const useChatStore = defineStore('chat', {
       }
       this.messages.push(assistant)
 
-      // 3-6. open SSE, handle token/done/error
-      this.currentController = streamChat(question, {
-        onToken: (text) => {
-          assistant.content += text
+      // 3-6. open SSE, handle token/done/error. Scope the query to the docs
+      // the user has selected (Feature 3). The documents store holds the
+      // current selection; an empty selection still sends (backend will reply
+      // with the "no documents ready" decline).
+      const { useDocumentsStore } = await import('./documents')
+      const documentsStore = useDocumentsStore()
+      const scopeIds = documentsStore.selectedReadyIds
+
+      let tokenCount = 0
+      this.currentController = streamChat(
+        question,
+        {
+          onToken: (text) => {
+            tokenCount += 1
+            // DEBUG: prove tokens reach the store. Check browser console.
+            console.log(`[chat] onToken #${tokenCount}:`, JSON.stringify(text))
+            assistant.content += text
+            // Force Pinia to notice the nested mutation on some Vue versions.
+            this.messages = [...this.messages]
+          },
+          onCitations: (citations) => {
+            console.log('[chat] onCitations:', citations)
+            assistant.citations = citations
+            assistant.isStreaming = false
+            this.messages = [...this.messages]
+          },
+          onError: (message) => {
+            console.error('[chat] onError:', message)
+            assistant.error = message
+            assistant.isStreaming = false
+            this.messages = [...this.messages]
+          },
+          onFinally: () => {
+            console.log('[chat] onFinally. total tokens:', tokenCount)
+            // If we never got a done/error event (e.g. aborted or stream cut),
+            // still clear isStreaming so the UI isn't stuck "typing" forever.
+            assistant.isStreaming = false
+            this.currentController = null
+            this.messages = [...this.messages]
+          },
         },
-        onCitations: (citations) => {
-          assistant.citations = citations
-          assistant.isStreaming = false
-        },
-        onError: (message) => {
-          assistant.error = message
-          assistant.isStreaming = false
-        },
-        onFinally: () => {
-          // If we never got a done/error event (e.g. aborted or stream cut),
-          // still clear isStreaming so the UI isn't stuck "typing" forever.
-          assistant.isStreaming = false
-          this.currentController = null
-        },
-      })
+        scopeIds,
+      )
     },
 
     cancel() {

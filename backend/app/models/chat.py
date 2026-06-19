@@ -6,10 +6,21 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class ChatRequest(BaseModel):
-    """``POST /api/chat`` body. Just the question — no document scoping in Lite
-    scope (search runs across all ready documents, see docs/04)."""
+    """``POST /api/chat`` body.
+
+    ``question`` is required. ``document_ids`` is optional document scoping:
+    when provided (non-empty), retrieval is restricted to those documents;
+    when omitted/empty, all ``ready`` documents are searched (the original
+    behavior). This is a spec extension over docs/04 (which defined only
+    ``question``) — see PROGRESS.md "Spec Deviations".
+    """
 
     question: str = Field(..., min_length=1, description="The user's question.")
+    document_ids: list[int] | None = Field(
+        default=None,
+        description="Optional list of document ids to restrict retrieval to. "
+        "Omit or send empty/null to search all ready documents.",
+    )
 
     @field_validator("question")
     @classmethod
@@ -17,6 +28,18 @@ class ChatRequest(BaseModel):
         if not v.strip():
             raise ValueError("question must not be blank")
         return v
+
+    @field_validator("document_ids")
+    @classmethod
+    def _normalize_doc_ids(cls, v: list[int] | None) -> list[int] | None:
+        # Drop duplicates / empties; treat an empty list as "all docs" (None)
+        # so the caller doesn't need to distinguish [] from null.
+        if not v:
+            return None
+        # De-dup while preserving order.
+        seen: set[int] = set()
+        unique = [x for x in v if x not in seen and not seen.add(x)]  # type: ignore[func-returns-value]
+        return unique or None
 
 
 class Citation(BaseModel):

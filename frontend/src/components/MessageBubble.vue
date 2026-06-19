@@ -4,14 +4,31 @@
 // render as CitationChips below the content. An error during streaming shows
 // an inline error state instead of leaving the bubble stuck mid-stream.
 
+import { computed } from 'vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import CitationChip from './CitationChip.vue'
 
-defineProps({
+const props = defineProps({
   role: { type: String, required: true }, // 'user' | 'assistant'
   content: { type: String, default: '' },
   citations: { type: Array, default: () => [] },
   isStreaming: { type: Boolean, default: false },
   error: { type: String, default: null },
+})
+
+// Assistant answers are markdown (bold, italic, lists). Parse -> sanitize ->
+// render as HTML. DOMPurify is mandatory: the LLM output is untrusted and we
+// must never inject raw HTML via v-html without sanitizing (XSS). User
+// messages stay plain text in the template (short, no formatting expected).
+//
+// marked is sync by default; recomputed on every `content` change (i.e. per
+// streamed token) — cheap on these small deltas.
+marked.setOptions({ breaks: true, gfm: true })
+const renderedHtml = computed(() => {
+  if (props.role !== 'assistant' || !props.content) return ''
+  const raw = marked.parse(props.content)
+  return DOMPurify.sanitize(typeof raw === 'string' ? raw : '')
 })
 </script>
 
@@ -23,8 +40,10 @@ defineProps({
     <div class="msg-body">
       <div class="meta">{{ role === 'user' ? 'You' : 'Assistant' }}</div>
 
-      <!-- Content. Render whitespace-pre-wrap so model newlines survive. -->
-      <div v-if="content" class="content">{{ content }}</div>
+      <!-- Content. Assistant answers are markdown -> sanitized HTML; user
+           messages stay plain text (short, no formatting expected). -->
+      <div v-if="role === 'assistant' && renderedHtml" class="content markdown-body" v-html="renderedHtml" />
+      <div v-else-if="content" class="content">{{ content }}</div>
 
       <!-- Streaming indicator: show only when assistant is mid-stream and has
            emitted nothing yet (or as a trailing caret). -->
@@ -43,6 +62,7 @@ defineProps({
           :key="i"
           :filename="c.filename"
           :page-number="c.page_number"
+          :excerpt="c.excerpt || ''"
         />
       </div>
     </div>
@@ -91,6 +111,41 @@ defineProps({
   white-space: pre-wrap;
   word-wrap: break-word;
   line-height: 1.5;
+}
+/* Markdown-rendered assistant answers: the parser emits <br>/<p>/<li>, so we
+   must NOT use white-space: pre-wrap here (would double the line breaks). */
+.content.markdown-body {
+  white-space: normal;
+}
+.content.markdown-body :deep(p) {
+  margin: 0 0 0.5rem;
+}
+.content.markdown-body :deep(p:last-child) {
+  margin-bottom: 0;
+}
+.content.markdown-body :deep(ul),
+.content.markdown-body :deep(ol) {
+  margin: 0.25rem 0 0.5rem;
+  padding-left: 1.25rem;
+}
+.content.markdown-body :deep(li) {
+  margin: 0.15rem 0;
+}
+.content.markdown-body :deep(strong) {
+  font-weight: 700;
+}
+.content.markdown-body :deep(em) {
+  font-style: italic;
+}
+.content.markdown-body :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0.1em 0.3em;
+  border-radius: 0.3em;
+}
+.content.markdown-body :deep(a) {
+  color: var(--accent, #2563eb);
 }
 .streaming {
   margin-top: 0.15rem;

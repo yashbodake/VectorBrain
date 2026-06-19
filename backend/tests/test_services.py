@@ -171,6 +171,58 @@ async def test_status_transitions_to_failed_on_exception(session, mock_llm, real
 
 
 # ---------------------------------------------------------------------------
+# Document scoping (Feature 3): document_ids restricts which docs are searched
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_retrieval_respects_document_scope(session):
+    """With document_ids set, only chunks from those docs come back — even if a
+    better-matching chunk exists in an out-of-scope doc."""
+    from app.services.retrieval import search_chunks
+
+    docs = [
+        Document(filename="in_scope.pdf", file_path="/tmp/a.pdf", status="ready"),
+        Document(filename="out_scope.pdf", file_path="/tmp/b.pdf", status="ready"),
+    ]
+    session.add_all(docs)
+    await session.flush()
+    # Both docs have a 'cats' chunk; the out-of-scope one is *closer* (same
+    # vector, lower chunk_id tiebreak aside). Scope must exclude it anyway.
+    session.add_all([
+        Chunk(document_id=docs[0].id, content="cats in scope", chunk_index=0, page_number=1, embedding=vec("cats")),
+        Chunk(document_id=docs[1].id, content="cats out of scope", chunk_index=0, page_number=1, embedding=vec("cats")),
+    ])
+    await session.commit()
+
+    # Scope to only the first doc.
+    results = await search_chunks(session, vec("cats"), top_k=10, document_ids=[docs[0].id])
+    assert results, "expected results from the in-scope doc"
+    assert all(r.document_id == docs[0].id for r in results), "out-of-scope doc leaked in"
+    assert {r.filename for r in results} == {"in_scope.pdf"}
+
+    # No scope -> both docs searchable (backward compatible).
+    all_results = await search_chunks(session, vec("cats"), top_k=10)
+    assert {r.filename for r in all_results} == {"in_scope.pdf", "out_scope.pdf"}
+
+
+@pytest.mark.asyncio
+async def test_count_ready_respects_scope(session):
+    """count_ready_documents honors document_ids — the chat layer uses it to
+    decide whether to decline with 'no documents ready'."""
+    from app.services.retrieval import count_ready_documents
+
+    docs = [
+        Document(filename="a.pdf", file_path="/tmp/a.pdf", status="ready"),
+        Document(filename="b.pdf", file_path="/tmp/b.pdf", status="ready"),
+    ]
+    session.add_all(docs)
+    await session.commit()
+
+    assert await count_ready_documents(session) == 2  # all ready
+    assert await count_ready_documents(session, [docs[0].id]) == 1  # scoped
+    assert await count_ready_documents(session, [999999]) == 0  # none match scope
+
+
+# ---------------------------------------------------------------------------
 # Helper: build a mock embedding vector (384-dim, unit length)
 # ---------------------------------------------------------------------------
 def vec(keyword: str):

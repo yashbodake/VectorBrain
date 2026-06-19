@@ -37,9 +37,13 @@ class RetrievedChunk:
 
 
 async def search_chunks(
-    session: AsyncSession, query_embedding: list[float], top_k: int | None = None
+    session: AsyncSession,
+    query_embedding: list[float],
+    top_k: int | None = None,
+    document_ids: list[int] | None = None,
 ) -> list[RetrievedChunk]:
-    """Run the top-k similarity search across all ``ready`` documents.
+    """Run the top-k similarity search, optionally restricted to a set of
+    document ids (document scoping, Feature 3).
 
     Returns chunks in ascending distance order, already filtered by the
     relevance threshold. Callers should treat an empty list as "nothing
@@ -52,8 +56,12 @@ async def search_chunks(
     # expressible cleanly through the ORM core, so we use an explicit query
     # matching docs/03 verbatim. Parameters bound via SQLAlchemy text() to get
     # proper asyncpg escaping (avoid SQL injection on the embedding literal).
+    #
+    # Document scoping: when document_ids is provided, restrict to those ids
+    # via ANY(:doc_ids). When omitted, the branch is skipped (all ready docs).
+    scoped = bool(document_ids)
     stmt = text(
-        """
+        f"""
         SELECT
             c.id            AS chunk_id,
             c.content       AS content,
@@ -64,6 +72,7 @@ async def search_chunks(
         FROM chunks c
         JOIN documents d ON d.id = c.document_id
         WHERE d.status = 'ready'
+          {"AND d.id = ANY(:doc_ids)" if scoped else ""}
         ORDER BY c.embedding <=> CAST(:embedding AS vector)
         LIMIT :top_k
         """
@@ -73,6 +82,8 @@ async def search_chunks(
         embedding=_vector_literal(query_embedding),
         top_k=k,
     )
+    if scoped:
+        stmt = stmt.bindparams(doc_ids=list(document_ids))  # type: ignore[arg-type]
 
     result = await session.execute(stmt)
     rows = result.mappings().all()
@@ -97,10 +108,19 @@ async def search_chunks(
     return out
 
 
-async def count_ready_documents(session: AsyncSession) -> int:
-    """Number of documents available for retrieval. Used by the chat layer to
-    give a graceful 'no documents ready yet' message instead of erroring."""
-    stmt = text("SELECT count(*) FROM documents WHERE status = 'ready'")
+async def count_ready_documents(
+    session: AsyncSession, document_ids: list[int] | None = None
+) -> int:
+    """Number of in-scope ready documents. Used by the chat layer to give a
+    graceful 'no documents ready yet' message instead of erroring. Respects
+    the same document scoping as ``search_chunks``."""
+    scoped = bool(document_ids)
+    stmt = text(
+        f"SELECT count(*) FROM documents WHERE status = 'ready'"
+        f"{' AND id = ANY(:doc_ids)' if scoped else ''}"
+    )
+    if scoped:
+        stmt = stmt.bindparams(doc_ids=list(document_ids))  # type: ignore[arg-type]
     result = await session.execute(stmt)
     return int(result.scalar_one())
 

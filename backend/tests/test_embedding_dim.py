@@ -68,18 +68,24 @@ def test_build_messages_with_no_chunks_still_includes_question():
 
 def test_citation_deduplication():
     """The chat layer dedupes (filename, page) — two chunks from the same page
-    collapse to one citation."""
+    collapse to one citation. Each citation now also carries an excerpt of the
+    most-relevant chunk for that page (Feature 2: hoverable citations)."""
     from app.services.chat import _dedupe_citations
 
     chunks = [
-        RetrievedChunk(chunk_id=1, content="a", page_number=1, filename="x.pdf", document_id=1, distance=0.1),
-        RetrievedChunk(chunk_id=2, content="b", page_number=1, filename="x.pdf", document_id=1, distance=0.2),
-        RetrievedChunk(chunk_id=3, content="c", page_number=2, filename="x.pdf", document_id=1, distance=0.3),
-        RetrievedChunk(chunk_id=4, content="d", page_number=1, filename="y.pdf", document_id=2, distance=0.4),
+        RetrievedChunk(chunk_id=1, content="a cats passage", page_number=1, filename="x.pdf", document_id=1, distance=0.1),
+        RetrievedChunk(chunk_id=2, content="b more cats", page_number=1, filename="x.pdf", document_id=1, distance=0.2),
+        RetrievedChunk(chunk_id=3, content="c cats page two", page_number=2, filename="x.pdf", document_id=1, distance=0.3),
+        RetrievedChunk(chunk_id=4, content="d other doc", page_number=1, filename="y.pdf", document_id=2, distance=0.4),
     ]
     deduped = _dedupe_citations(chunks)
-    assert deduped == [
-        {"filename": "x.pdf", "page_number": 1},
-        {"filename": "x.pdf", "page_number": 2},
-        {"filename": "y.pdf", "page_number": 1},
+    # One citation per (filename, page), in retrieval order.
+    assert [(c["filename"], c["page_number"]) for c in deduped] == [
+        ("x.pdf", 1),
+        ("x.pdf", 2),
+        ("y.pdf", 1),
     ]
+    # The excerpt is the highest-ranked chunk for that page (first occurrence).
+    assert deduped[0]["excerpt"] == "a cats passage"
+    assert deduped[1]["excerpt"] == "c cats page two"
+    assert deduped[2]["excerpt"] == "d other doc"

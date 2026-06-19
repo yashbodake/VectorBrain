@@ -71,7 +71,9 @@ async def chat(
 
     async def event_generator() -> AsyncIterator[bytes]:
         any_token_sent = False
-        async for event in stream_chat(session, payload.question):
+        async for event in stream_chat(
+            session, payload.question, document_ids=payload.document_ids
+        ):
             if isinstance(event, TokenEvent):
                 any_token_sent = True
                 yield _sse("token", {"text": event.text})
