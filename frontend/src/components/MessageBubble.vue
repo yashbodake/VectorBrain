@@ -44,12 +44,13 @@ const hoveredCite = ref(null) // { idx, filename, pageNumber, excerpt } | null
 function onCiteEnter(e) {
   const el = e.target.closest('.inline-cite')
   if (!el) return
-  const groupIdx = Number(el.dataset.citeGroup)
-  // +1: the model's [1] maps to citations[0] (1-based markers, 0-based array).
-  const cite = props.citations[groupIdx]
+  // The number INSIDE the brackets is 1-based (model's [1] = first excerpt).
+  // The backend's citations array is in that same order, so [N] -> citations[N-1].
+  const citeNum = Number(el.dataset.citeNum)
+  const cite = props.citations[citeNum - 1]
   if (!cite) return
   hoveredCite.value = {
-    groupIdx,
+    citeNum,
     filename: cite.filename,
     pageNumber: cite.page_number,
     excerpt: cite.excerpt || '',
@@ -126,7 +127,7 @@ function onCiteLeave(e) {
           <span v-if="hoveredCite.pageNumber !== null" class="inline-cite-page">p. {{ hoveredCite.pageNumber }}</span>
         </div>
         <div v-if="hoveredCite.excerpt" class="inline-cite-excerpt">{{ hoveredCite.excerpt }}</div>
-        <div v-else class="inline-cite-excerpt muted">Citation {{ hoveredCite.groupIdx + 1 }} (source loading…)</div>
+        <div v-else class="inline-cite-excerpt muted">Citation [{{ hoveredCite.citeNum }}] (source loading…)</div>
       </div>
     </Teleport>
   </div>

@@ -1,27 +1,28 @@
 // Turns LLM inline citation markers ([1], [1][3]) in the rendered answer into
 // hoverable <sup> elements that the frontend can bind a popup to.
 //
-// Also strips the dagger-style artifacts some models emit (【1†L1-L4】) down to
-// a clean [1], so a non-conforming model output still renders nicely.
+// Also strips the cuneiform/dagger artifacts some models emit (【1†L1-L4】,
+// 【1】, 〖1〗) down to a clean [1], so non-conforming output still renders.
 //
-// Markers reference excerpts by 1-based index in the order they were fed to the
-// model — which matches the order of the `citations` array the backend returns
-// in the done event (see backend _dedupe_citations: retrieval order, [1] first).
+// Indexing convention: the number INSIDE the brackets is 1-based and refers to
+// the excerpt position in the prompt ([1] = first excerpt). The backend's
+// `citations` array is in that same order, so cite number N maps to
+// citations[N - 1]. CRITICAL: do not confuse "marker position in text" with
+// "the number inside the brackets" — they're different things.
 
-// Match [n] or [n][m]... runs. n is a positive integer. We deliberately don't
-// match things inside code spans/links by keeping this simple — a stray [1] in
-// code is rare and the worst case is a harmless superscript.
+// Match [n] or [n][m]... runs. n is a positive integer.
 const MARKER_RUN = /\[\d+\](?:\[\d+\])*/g
-// Match the bracket/cuneiform artifacts some models emit. We collapse any of
-// these to a plain [n] so they then match MARKER_RUN and become hoverable:
-//   【1†L1-L4】  (number + dagger + invented line range)
-//   【1】        (number only, no dagger — gpt-oss emits this variant)
-//   〖1〗        (alternate brackets)
+// Match cuneiform/dagger artifacts and collapse to a plain [n]:
+//   【1†L1-L4】, 【1】, 〖1〗
 const DAGGER = /[【〖]\s*(\d+)\s*(?:†[^\】〗]*)?[】〗]/g
 
+// Private-use sentinel chars that survive markdown + DOMPurify intact.
+const SENTINEL_OPEN = '\uE000'
+const SENTINEL_CLOSE = '\uE001'
+
 /**
- * Clean model artifacts (dagger ranges) so they normalize to [n].
- * e.g. "text 【1†L1-L4】 more" -> "text [1] more".
+ * Clean model artifacts (dagger ranges, cuneiform brackets) so they normalize
+ * to [n]. e.g. "text 【1†L1-L4】 more" -> "text [1] more".
  */
 export function normalizeCitationMarkers(text) {
   if (!text) return text
@@ -29,39 +30,31 @@ export function normalizeCitationMarkers(text) {
 }
 
 /**
- * Replace [n] markers in a plain-text answer with placeholder tokens we can
- * revive after markdown rendering. We use a unique sentinel so marked's HTML
- * output won't escape it into oblivion.
+ * Replace each [n] (or [n][m]...) marker with a sentinel carrying the FIRST
+ * number in the group. We keep the first number because the popup shows one
+ * excerpt; a [1][3] run means "supported by excerpts 1 and 3" — the most
+ * relevant is the first (excerpt 1).
  *
- * Returns { text, refs } where refs is the list of marker groups in order,
- * each a list of numbers, e.g. [[1], [1,3]]. The sentinel format is chosen so
- * it survives markdown -> HTML -> sanitize intact.
+ * Returns the text with markers replaced by sentinels.
  */
-const SENTINEL_OPEN = '\uE000' // private-use area; survives sanitize
-const SENTINEL_CLOSE = '\uE001'
-
 export function extractMarkers(text) {
-  if (!text) return { text: '', refs: [] }
-  const refs = []
-  const out = text.replace(MARKER_RUN, (run) => {
-    const nums = (run.match(/\d+/g) || []).map(Number)
-    refs.push(nums)
-    return SENTINEL_OPEN + (refs.length - 1) + SENTINEL_CLOSE
+  if (!text) return ''
+  return text.replace(MARKER_RUN, (run) => {
+    const firstNum = Number((run.match(/\d+/) || ['1'])[0])
+    return SENTINEL_OPEN + firstNum + SENTINEL_CLOSE
   })
-  return { text: out, refs }
 }
 
 /**
  * Turn sentinel tokens in sanitized HTML into <sup class="inline-cite"> nodes.
- * Called AFTER marked + DOMPurify so we operate on safe HTML. Each node carries
- * data-cite-ids="1,3" so the component can look up excerpts on hover.
+ * Called AFTER marked + DOMPurify so we operate on safe HTML.
+ * data-cite-num carries the 1-based excerpt number from inside the brackets;
+ * the component maps it to citations[num - 1].
  */
 export function renderSentinelsAsCites(html) {
   if (!html) return html
-  // The sentinels are private-use chars; they pass through sanitize untouched.
   const re = new RegExp(SENTINEL_OPEN + '(\\d+)' + SENTINEL_CLOSE, 'g')
-  return html.replace(re, (_, idx) => {
-    // Placeholder content; the Vue component swaps in the superscript popup.
-    return `<sup class="inline-cite" data-cite-group="${idx}">[${idx}]</sup>`
+  return html.replace(re, (_, num) => {
+    return `<sup class="inline-cite" data-cite-num="${num}">[${num}]</sup>`
   })
 }
