@@ -78,7 +78,10 @@ async def chat(
                 any_token_sent = True
                 yield _sse("token", {"text": event.text})
             elif isinstance(event, DoneEvent):
-                yield _sse("done", {"citations": event.citations})
+                yield _sse(
+                    "done",
+                    {"citations": event.citations, "sources": event.sources},
+                )
             elif isinstance(event, ErrorEvent):
                 # If nothing streamed yet, we'd prefer to return 503 — but the
                 # StreamingResponse status was already sent (200) when the first

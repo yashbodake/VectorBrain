@@ -4,7 +4,7 @@
 // render as CitationChips below the content. An error during streaming shows
 // an inline error state instead of leaving the bubble stuck mid-stream.
 
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import CitationChip from './CitationChip.vue'
@@ -17,7 +17,8 @@ import {
 const props = defineProps({
   role: { type: String, required: true }, // 'user' | 'assistant'
   content: { type: String, default: '' },
-  citations: { type: Array, default: () => [] },
+  citations: { type: Array, default: () => [] }, // per-chunk, for inline [n]
+  sources: { type: Array, default: () => [] }, // deduped per-page, for chips
   isStreaming: { type: Boolean, default: false },
   error: { type: String, default: null },
 })
@@ -39,7 +40,9 @@ const renderedHtml = computed(() => {
 // The <sup class="inline-cite"> nodes are injected via v-html, so we can't bind
 // Vue handlers to them directly. Instead we delegate mouseenter/leave on the
 // container. The data-cite-group attribute maps to the index in `citations`.
-const hoveredCite = ref(null) // { idx, filename, pageNumber, excerpt } | null
+const hoveredCite = ref(null) // { citeNum, filename, pageNumber, excerpt, rect } | null
+// A chip the user CLICKED (pinned open). Null when none. Click again to close.
+const pinnedSource = ref(null)
 
 function onCiteEnter(e) {
   const el = e.target.closest('.inline-cite')
@@ -64,6 +67,33 @@ function onCiteLeave(e) {
   if (!el) return
   hoveredCite.value = null
 }
+
+// Click a source chip -> pin its popup open (click again / click elsewhere to
+// close). The popup reuses the inline-cite-pop styling for consistency.
+function toggleSourcePin(e, idx, source) {
+  // Clicking the same pinned chip closes it.
+  if (pinnedSource.value && pinnedSource.value.idx === idx) {
+    pinnedSource.value = null
+    return
+  }
+  const rect = e.currentTarget.getBoundingClientRect()
+  pinnedSource.value = {
+    idx,
+    filename: source.filename,
+    pageNumber: source.page_number,
+    excerpt: source.excerpt || '',
+    rect,
+  }
+}
+
+// Click anywhere outside a chip/popup closes the pinned popup.
+function onGlobalClick(e) {
+  if (!pinnedSource.value) return
+  if (e.target.closest('.source-chip-btn') || e.target.closest('.inline-cite-pop.pinned')) return
+  pinnedSource.value = null
+}
+onMounted(() => document.addEventListener('click', onGlobalClick))
+onBeforeUnmount(() => document.removeEventListener('click', onGlobalClick))
 </script>
 
 <template>
@@ -98,21 +128,46 @@ function onCiteLeave(e) {
       <!-- Inline error state (mid-stream failure). -->
       <div v-if="error" class="error">⚠️ {{ error }}</div>
 
-      <!-- Citations, only after streaming completes. -->
-      <div v-if="!isStreaming && citations.length" class="citations">
-        <CitationChip
-          v-for="(c, i) in citations"
+      <!-- Source chips: ONE per unique (filename, page), deduped by the backend.
+           Clickable — pins a popup open (click again to close). -->
+      <div v-if="!isStreaming && sources.length" class="citations">
+        <button
+          v-for="(s, i) in sources"
           :key="i"
-          :filename="c.filename"
-          :page-number="c.page_number"
-          :excerpt="c.excerpt || ''"
-        />
+          type="button"
+          class="source-chip-btn"
+          :class="{ pinned: pinnedSource && pinnedSource.idx === i }"
+          :title="`Source: ${s.filename}${s.page_number !== null ? ', p. ' + s.page_number : ''}`"
+          @click="toggleSourcePin($event, i, s)"
+        >
+          <CitationChip
+            :filename="s.filename"
+            :page-number="s.page_number"
+            :excerpt="s.excerpt || ''"
+          />
+        </button>
       </div>
     </div>
 
-    <!-- Inline-citation hover popup. Teleported to body so it isn't clipped by
-         the bubble's overflow / border-radius. Fixed-positioned at the marker. -->
+    <!-- Popups teleported to body so they aren't clipped by the bubble. -->
     <Teleport to="body">
+      <!-- Click-pinned source-chip popup (stays open until clicked again). -->
+      <div
+        v-if="pinnedSource"
+        class="inline-cite-pop pinned"
+        :style="{ top: (pinnedSource.rect.top - 8) + 'px', left: pinnedSource.rect.left + 'px' }"
+        @click.stop
+      >
+        <button class="pop-close" title="Close" @click="pinnedSource = null">✕</button>
+        <div class="inline-cite-header">
+          <strong>{{ pinnedSource.filename }}</strong>
+          <span v-if="pinnedSource.pageNumber !== null" class="inline-cite-page">p. {{ pinnedSource.pageNumber }}</span>
+        </div>
+        <div v-if="pinnedSource.excerpt" class="inline-cite-excerpt">{{ pinnedSource.excerpt }}</div>
+        <div v-else class="inline-cite-excerpt muted">No excerpt available.</div>
+      </div>
+
+      <!-- Inline [n] hover popup (transient, follows the mouse). -->
       <div
         v-if="hoveredCite"
         class="inline-cite-pop"
@@ -247,6 +302,52 @@ function onCiteLeave(e) {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+}
+
+/* Source chips are wrapped in a real <button> so they're keyboard-focusable
+   and clickable (pins the excerpt popup open). Reset button defaults so the
+   CitationChip styling shows through. */
+.source-chip-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  border-radius: 999px; /* match the chip's pill shape for the focus ring */
+  transition: transform 0.1s;
+}
+.source-chip-btn:hover { transform: translateY(-1px); }
+.source-chip-btn:focus-visible {
+  outline: 2px solid var(--accent, #2563eb);
+  outline-offset: 2px;
+}
+.source-chip-btn.pinned {
+  filter: drop-shadow(0 0 0 var(--accent, #2563eb));
+}
+.source-chip-btn.pinned :deep(.citation-chip),
+.source-chip-btn:hover :deep(.citation-chip) {
+  background: var(--accent-soft, #e7eefd);
+  border-color: var(--accent, #2563eb);
+}
+
+/* Close button on the pinned popup. */
+.pop-close {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.4rem;
+  border: none;
+  background: transparent;
+  color: var(--muted, #6b7280);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0.15rem 0.3rem;
+  border-radius: 0.3rem;
+}
+.pop-close:hover { background: var(--chip-bg, #eef1f6); color: var(--text, #1f2533); }
+.inline-cite-pop.pinned {
+  cursor: default;
 }
 
 /* Inline [n] citation markers inside the answer text (NotebookLM-style). They

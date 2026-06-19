@@ -150,7 +150,7 @@ function handleFrame(frame, handlers) {
       handlers.onToken?.(payload.text ?? '')
       break
     case 'done':
-      handlers.onCitations?.(payload.citations ?? [])
+      handlers.onCitations?.(payload.citations ?? [], payload.sources ?? [])
       break
     case 'error':
       handlers.onError?.(payload.message ?? 'Something went wrong.')

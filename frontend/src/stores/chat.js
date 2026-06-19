@@ -38,7 +38,8 @@ export const useChatStore = defineStore('chat', {
         id: makeId(),
         role: 'assistant',
         content: '',
-        citations: [],
+        citations: [], // per-chunk (inline [n] lookup)
+        sources: [], // deduped per-(filename,page) for the chips below
         isStreaming: true,
         error: null,
       }
@@ -64,9 +65,10 @@ export const useChatStore = defineStore('chat', {
             // Force Pinia to notice the nested mutation on some Vue versions.
             this.messages = [...this.messages]
           },
-          onCitations: (citations) => {
-            console.log('[chat] onCitations:', citations)
+          onCitations: (citations, sources) => {
+            console.log('[chat] onCitations:', citations, sources)
             assistant.citations = citations
+            assistant.sources = sources || []
             assistant.isStreaming = false
             this.messages = [...this.messages]
           },

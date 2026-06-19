@@ -42,6 +42,11 @@ class DoneEvent:
     # where every chunk shares (filename, page) would collapse to one entry and
     # [2]/[3] would have no match).
     citations: list[dict[str, object]]
+    # Deduped by (filename, page) — ONE entry per unique source page. This is
+    # what the chips below the answer render, so a 17-chunk single-page doc
+    # shows 1 chip, not 17 identical "p.1" chips. Distinct from `citations`
+    # (which is per-chunk for inline-[n] lookup).
+    sources: list[dict[str, object]]
     # True when the answer was a canned decline (no LLM was called). Lets the
     # frontend distinguish "model said it couldn't find X" from "retrieval said
     # so" — not strictly required by the spec but cheap to expose.
@@ -108,6 +113,7 @@ async def stream_chat(
     # dedupe here: deduping by (filename, page) breaks inline [n] lookups when
     # multiple chunks share a page (single-page docs would collapse to 1 entry).
     citations = _chunk_citations(chunks)
+    sources = _dedupe_citations(chunks)  # per-(filename,page) for the chips
 
     try:
         # stream_answer is a SYNC iterator (OpenAI SDK). Pump it through a
@@ -119,7 +125,7 @@ async def stream_chat(
         yield ErrorEvent(message=str(exc))
         return
 
-    yield DoneEvent(citations=citations, declined=False)
+    yield DoneEvent(citations=citations, sources=sources, declined=False)
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +138,7 @@ async def _stream_decline(message: str) -> AsyncIterator[ChatEvent]:
     not a real LLM stream, and one token keeps the SSE traffic minimal. The
     frontend renders it the same way."""
     yield TokenEvent(text=message)
-    yield DoneEvent(citations=[], declined=True)
+    yield DoneEvent(citations=[], sources=[], declined=True)
 
 
 async def _stream_from_sync(messages: list[dict[str, str]]) -> AsyncIterator[str]:
