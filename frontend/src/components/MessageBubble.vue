@@ -29,8 +29,8 @@ marked.setOptions({ breaks: true, gfm: true })
 const renderedHtml = computed(() => {
   if (props.role !== 'assistant' || !props.content) return ''
   const cleaned = normalizeCitationMarkers(props.content)
-  const { text } = extractMarkers(cleaned)
-  const raw = marked.parse(text)
+  const withSentinels = extractMarkers(cleaned)
+  const raw = marked.parse(withSentinels)
   const safe = DOMPurify.sanitize(typeof raw === 'string' ? raw : '')
   return renderSentinelsAsCites(safe)
 })
