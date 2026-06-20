@@ -108,3 +108,39 @@ python eval/run_eval.py --no-judge         # retrieval-only (fast, no API cost)
 ```
 
 Raw per-question results: `results.json`. Baseline (k=6) and experiment (k=10) snapshots: `results_k6.json`, `results_k10.json`.
+
+---
+
+## Experiment 2 — `RETRIEVAL_DISTANCE_THRESHOLD` 0.5 → 0.45
+
+**Hypothesis:** lowering the cosine-distance threshold would let the Q2 Ogimi chunk through (it was assumed borderline, ~0.5–0.55 distance).
+
+**Result:** ❌ **did not help, and made faithfulness worse — same pattern as Experiment 1.**
+
+| Metric | thr=0.5 (baseline) | thr=0.45 | Change |
+|---|---|---|---|
+| hit_rate | 0.80 | 0.80 | unchanged |
+| recall@k | 0.60 | 0.60 | unchanged |
+| MRR | 0.67 | 0.67 | unchanged |
+| key-facts | 0.80 | 0.80 | unchanged |
+| **faithfulness** | **0.90** | **0.60** | **↓ worse** |
+| Q2 (the miss) | miss | miss | unchanged |
+
+**Why retrieval didn't improve:** the Ogimi chunk's distance is **genuinely far** (>0.45), not borderline. The retrieved-page lists now include more noise (pages 3, 6, 64, 113–116 crept in) but still not page 9/39 where Ogimi is described. So the relevant chunk isn't "almost there" — it ranks well below the threshold because of the semantic mismatch with "travel."
+
+**Why faithfulness dropped to 0.60:** more borderline chunks in the prompt = more loosely-related passages = the model blended them and added partly-unsupported claims (the same failure mode as the k=10 experiment).
+
+**Decision: keep `RETRIEVAL_DISTANCE_THRESHOLD=0.5`** (reverted). Lowering it injected noise with zero retrieval upside.
+
+---
+
+## Cross-experiment conclusion
+
+Both naive tunings (more chunks, looser threshold) failed the same way: **no retrieval gain on Q2, faithfulness dropped ~30 points from added noise.** The Q2 miss is definitively a **semantic-mismatch** problem, not a threshold/k problem. The relevant chunk simply doesn't rank in the top results under the current embedding model, regardless of how wide the net is.
+
+**Implication for next steps:**
+- **Stop tuning k and threshold** — both proven ineffective for this failure class.
+- **The robust fix is query transformation** (HyDE: rewrite the query into a hypothetical answer before embedding). This changes the *query* to match the chunk's vocabulary ("Ogimi/Okinawa") rather than hoping wider retrieval catches it.
+- **Alternatively: a stronger embedding model** (bge-large, or multilingual if the book has non-English passages) — but that's a schema migration (dim change), heavier than HyDE.
+
+The baseline config (`TOP_K_RESULTS=6`, `RETRIEVAL_DISTANCE_THRESHOLD=0.5`) stands as the best-measured setting. Snapshot: `results_k6.json`.
