@@ -47,15 +47,31 @@ cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-# Torch + torchvision must be a matched CPU pair from the PyTorch index
-# (otherwise: "operator torchvision::nms does not exist"):
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# Torch + torchvision must be an ABI-MATCHED pair from the PyTorch index —
+# install exactly one of the two options below (mixing them raises
+# "operator torchvision::nms does not exist" at import time):
+
+#   CPU (works everywhere — the default):
+pip install torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+
+#   GPU (CUDA 12.4 — for an NVIDIA GPU; ~3-5x faster ingestion):
+pip install torch==2.6.0+cu124 torchvision==0.21.0+cu124 --index-url https://download.pytorch.org/whl/cu124
 
 # Apply the schema (creates extension vector, documents, chunks, HNSW index):
 alembic upgrade head
 
 uvicorn app.main:app --reload --port 8000
 ```
+
+**GPU (optional).** Ingestion (Docling OCR + bge embeddings) can run on an NVIDIA GPU for a ~3-5x speedup on large PDFs. It's driven by one env var:
+
+```ini
+DEVICE=auto   # default — use CUDA if the cu124 wheel is installed + a GPU is present, else CPU
+DEVICE=cuda   # force GPU; fails loud if unavailable
+DEVICE=cpu    # force CPU
+```
+
+`auto` requires no code edits — installing the cu124 wheel (above) and having a GPU is enough. See `docs/08-gpu-and-ocr-plan.md` for the full design (4GB cards like the RTX 2050 work; Docling's table/formula models stay on CPU to avoid OOM).
 
 Open the interactive API docs at <http://localhost:8000/docs>.
 

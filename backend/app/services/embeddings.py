@@ -38,8 +38,12 @@ def get_model() -> SentenceTransformer:
     Loaded on first use (not at import) so importing the module is cheap and
     the app boots fast — the heavy load only happens when ingestion/query
     actually needs it.
+
+    Device comes from ``settings.torch_device`` ('cuda' when available +
+    configured, else 'cpu'). Moving the model to GPU makes batch embedding
+    materially faster on large ingestions — see docs/08-gpu-and-ocr-plan.md.
     """
-    return SentenceTransformer(settings.EMBEDDING_MODEL)
+    return SentenceTransformer(settings.EMBEDDING_MODEL, device=settings.torch_device)
 
 
 def encode_chunks(texts: list[str]) -> "NDArray[np.float32]":

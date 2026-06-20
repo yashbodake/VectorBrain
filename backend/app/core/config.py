@@ -9,6 +9,7 @@ want (fail fast on misconfiguration rather than failing later at runtime).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -45,6 +46,14 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
     EMBEDDING_DIM: int = 384
 
+    # --- Compute device for ingestion (embeddings + Docling OCR/layout) ---
+    #   auto  — use CUDA if torch was installed with it AND it's available, else CPU (default, safest)
+    #   cuda  — force CUDA; raises at boot if unavailable (fail loud, not silent-CPU)
+    #   cpu   — force CPU (the behavior before this option existed)
+    # See docs/08-gpu-and-ocr-plan.md Part A. Installing the cu124 torch wheel
+    # + setting DEVICE=cuda (or leaving auto on a CUDA machine) turns on GPU.
+    DEVICE: Literal["auto", "cpu", "cuda"] = "auto"
+
     # --- Ingestion / Chunking ---
     CHUNK_MAX_TOKENS: int = 512
     TOP_K_RESULTS: int = 6
@@ -77,6 +86,36 @@ class Settings(BaseSettings):
     @property
     def max_upload_size_bytes(self) -> int:
         return self.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+
+    @property
+    def torch_device(self) -> str:
+        """Resolve the configured DEVICE into a concrete torch device string.
+
+        ``auto`` (default) probes CUDA once and picks it if available, else
+        CPU — so the same code runs on GPU and CPU machines without edits.
+        ``cuda`` forces it and raises if unavailable (better to fail at boot
+        than silently run on CPU when the user explicitly asked for GPU).
+        Cached after first resolution.
+
+        torch is imported lazily here so importing config doesn't pull torch
+        (keeps app boot fast and lets non-ML code paths avoid the dependency).
+        """
+        if not hasattr(self, "_resolved_device"):
+            import torch  # local: don't load torch at config-import time
+            if self.DEVICE == "cpu":
+                resolved = "cpu"
+            elif self.DEVICE == "cuda":
+                if not torch.cuda.is_available():
+                    raise RuntimeError(
+                        "DEVICE=cuda but torch.cuda.is_available() is False. "
+                        "Install the cu124 torch wheel "
+                        "(see docs/08-gpu-and-ocr-plan.md Part C) or set DEVICE=auto/cpu."
+                    )
+                resolved = "cuda"
+            else:  # auto
+                resolved = "cuda" if torch.cuda.is_available() else "cpu"
+            self._resolved_device = resolved  # type: ignore[attr-defined]
+        return self._resolved_device  # type: ignore[attr-defined]
 
     @property
     def storage_path(self) -> Path:
