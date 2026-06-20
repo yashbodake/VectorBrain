@@ -50,20 +50,96 @@ def chunk_document(doc: Any) -> list[ParsedChunk]:
     get_page = _page_resolver(doc)
 
     out: list[ParsedChunk] = []
-    for idx, chunk in enumerate(chunker.chunk(doc)):
+    kept_index = 0  # chunk_index among KEPT chunks (gaps from filtered chunks
+                    # don't leave holes in the stored sequence)
+    for _doc_idx, chunk in enumerate(chunker.chunk(doc)):
         content = _extract_text(chunk)
         if not content.strip():
             # Skip empty chunks rather than write noise rows to the DB.
+            continue
+        if _is_boilerplate(content):
+            # Skip front/back-matter noise (copyright page, TOC, bibliography,
+            # ISBN/legal disclaimers). These embed semantically close to topical
+            # queries (they contain the title + keywords) and crowd out real
+            # content in top-k retrieval. Eval-proven issue on the Ikigai book:
+            # copyright/TOC/biblio ranked #1-3, pushing the actual answer
+            # (Ogimi/Okinawa) to rank #8 — outside top_k=6.
             continue
         page_number = get_page(chunk)
         out.append(
             ParsedChunk(
                 content=content,
                 page_number=page_number,
-                chunk_index=idx,
+                chunk_index=kept_index,
             )
         )
+        kept_index += 1
     return out
+
+
+# Patterns that mark a chunk as boilerplate front/back-matter rather than
+# content. Matched case-insensitively against the chunk text. Tuned to catch
+# the publishers'-office pages (copyright, ISBN, TOC, bibliography, legal
+# disclaimers) that Docling faithfully extracts but add no answer value.
+_BOILERPLATE_MARKERS = (
+    "all rights reserved",
+    "library of congress",
+    "copyright ©",
+    "copyright by",
+    "isbn",
+    "published by",
+    "no part of this book",
+    "without the prior written permission",
+    "title page\n",
+    "table of contents",
+    "this book was set",
+    "printed in the",
+    "disclaimer",
+    "selected bibliography",
+    "for further reading",
+    "works cited",
+    "references\n",
+)
+
+
+def _looks_like_citation_list(content: str) -> bool:
+    """Detect a bibliography/references page: many short lines that look like
+    'Surname, Firstname. Title. Publisher, Year.' citations. Heuristic: at least
+    3 lines containing a 4-digit year AND a period (the citation punctuation
+    pattern). Catches reference lists that lack an explicit 'Bibliography'
+    heading (e.g. the Ikigai book's 'The authors were greatly inspired by:' page
+    that lists Breznitz/Hemingway/Buettner with publisher+year)."""
+    import re
+
+    year_re = re.compile(r"\b(1[5-9]\d{2}|20\d{2})\b")
+    lines = [ln.strip() for ln in content.splitlines() if len(ln.strip()) > 15]
+    citation_lines = sum(
+        1
+        for ln in lines
+        if year_re.search(ln) and ("." in ln) and ("," in ln)
+    )
+    # Require at least 3 citation-like lines AND that they're a sizable fraction
+    # of the chunk — a body paragraph won't have 3+ year+period+comma lines.
+    return citation_lines >= 3 and citation_lines >= len(lines) * 0.4
+
+
+def _is_boilerplate(content: str) -> bool:
+    """Heuristic: is this chunk publishers'-office noise we shouldn't index?
+
+    A chunk is boilerplate if it's very short (under ~40 chars of real text —
+    headers/section dividers) OR contains a strong boilerplate marker OR looks
+    like a citation list (bibliography/references page). Kept conservative so
+    we never drop genuine content.
+    """
+    stripped = content.strip()
+    # Very short chunks are almost always headers/dividers, not content.
+    real_len = sum(1 for c in stripped if not c.isspace())
+    if real_len < 40:
+        return True
+    low = content.lower()
+    if any(marker in low for marker in _BOILERPLATE_MARKERS):
+        return True
+    return _looks_like_citation_list(content)
 
 
 # ---------------------------------------------------------------------------

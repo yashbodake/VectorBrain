@@ -60,18 +60,32 @@
 
 ---
 
-## The one failure (Q2) — root cause
+## The one failure (Q2) — root cause (REVISED after deeper debugging)
+
+> **Correction:** an earlier draft of this report diagnosed Q2 as a "semantic-mismatch" problem and recommended HyDE. **That diagnosis was wrong.** Direct distance measurement showed the Ogimi chunks are *fully retrievable* (distance 0.31, well under threshold). The real root cause is below.
 
 **Q:** *"Where do the authors travel to study longevity and ikigai?"*
 **Expected:** Ogimi / Okinawa (pages 9, 14, 39).
-**Got:** nothing relevant cleared the 0.5 threshold.
+**Got:** pages 3, 6, 119, 13, 64, 10 — none on the expected list.
 
-This is a **semantic-mismatch** retrieval failure, not a k or threshold problem (proven by Experiment 1). The query's framing ("travel to study") doesn't share enough token/semantic overlap with the chunk text ("Ogimi, a rural town on the north end of Okinawa") for the cosine distance to clear the threshold.
+**The full ranking told the real story:**
 
-**Candidate fixes to A/B test next:**
-1. **HyDE-style query rewriting** — have a cheap LLM call rewrite the query into a hypothetical answer ("The authors travel to Ogimi in Okinawa...") before embedding it. Best-known fix for this exact failure mode.
-2. **Lower `RETRIEVAL_DISTANCE_THRESHOLD` 0.5 → 0.45** — borderline matches (the Ogimi chunk was likely ~0.5–0.55). Re-run the eval to confirm recall goes up without hurting faithfulness.
-3. **Multi-query retrieval** — embed 2-3 paraphrases of the question and union the results.
+```
+#1 p.3   "New York 10014 penguin.com Copyright © 2016..."    ← COPYRIGHT PAGE (noise)
+#2 p.6   "Title Page Copyright Dedication Epigraph Prologue" ← TABLE OF CONTENTS (noise)
+#3 p.119 "The authors of Ikigai were greatly inspired by..." ← BIBLIOGRAPHY (noise)
+#4 p.13  "Having a clearly defined ikigai brings..."          ← real content
+#5 p.64  "Because of its robust civil registry..."            ← borderline
+#6 p.10  "the joie de vivre that inspires these centenarians" ← real content
+──── top_k=6 cutoff ────
+#8 p.70  "Looking back, our days in Ogimi..."                 ← OGIMI (the answer) — RANK 8
+```
+
+**Root cause:** the book's **front/back-matter** (copyright page, TOC, bibliography) embeds semantically close to topical queries because it contains the title and keywords — so it *crowds out* the actual answer chunks in the top-k. Ogimi ranked #8, just outside top_k=6, displaced by 3 boilerplate pages. This is a **content-quality** problem, not a k/threshold/embedding problem (which is why experiments 1 & 2 didn't help).
+
+**Fix applied (simple, principled):** filter boilerplate chunks at ingestion (`chunking._is_boilerplate`) — drop chunks that are very short, or match copyright/TOC/ISBN/legal markers, or look like citation lists (bibliography pages). Unit-tested to filter the 3 noise types above with zero false positives on real content (incl. the "I was greatly inspired by my grandfather" edge case). See `tests/test_boilerplate_filter.py`.
+
+**Verification status:** fix is unit-tested and committed; the live re-eval requires re-ingesting Ikigai with the filter (the boilerplate chunks already in the DB predate the fix). Expected effect: with the 3 noise chunks gone, Ogimi (rank #8 → ~#5) enters the top-6 and Q2 resolves.
 
 ---
 
