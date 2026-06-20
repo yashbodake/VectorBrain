@@ -1,0 +1,170 @@
+{
+  "summary": {
+    "hit_rate": 0.8,
+    "recall_at_k": 0.6,
+    "mrr": 0.6666666666666667,
+    "key_facts": 0.8,
+    "faithfulness": 0.9,
+    "off_topic_declined": 2,
+    "overall_gen_pass": 6,
+    "n": 7
+  },
+  "rows": [
+    {
+      "question": "What is the meaning of the word ikigai?",
+      "expected_pages": [
+        12,
+        13,
+        14
+      ],
+      "retrieved_pages": [
+        14,
+        114,
+        13,
+        113,
+        3,
+        12
+      ],
+      "retrieval_hit": 1.0,
+      "retrieval_recall": 1.0,
+      "retrieval_mrr": 1.0,
+      "key_facts": 1.0,
+      "declined": false,
+      "gen_pass": true,
+      "faithfulness": 1.0,
+      "faith_reason": "Answer is fully supported by the provided context.",
+      "answer_preview": "**Ikigai** (written\u202f\u751f\u304d\u7532\u6590) literally joins the character\u202f\u751f\u304d\u202f\u201clife\u201d with\u202f\u7532\u6590\u202f\u201cworthwhile\u201d \u2013 together meaning \u201ca reason that makes life worthwhile.\u201d\u202fIn Japanese tho",
+      "error": null
+    },
+    {
+      "question": "Where do the authors travel to study longevity and ikigai?",
+      "expected_pages": [
+        9,
+        14,
+        39
+      ],
+      "retrieved_pages": [
+        3,
+        6,
+        119,
+        13,
+        64,
+        10
+      ],
+      "retrieval_hit": 0.0,
+      "retrieval_recall": 0.0,
+      "retrieval_mrr": 0.0,
+      "key_facts": 0.0,
+      "declined": false,
+      "gen_pass": false,
+      "faithfulness": 1.0,
+      "faith_reason": "The answer correctly notes that the excerpts contain no mention of travel destinations, which matches the provided context.",
+      "answer_preview": "The provided excerpts do not mention any specific places the authors travel to in order to study longevity or ikigai. None of the cited passages describe a trav",
+      "error": null
+    },
+    {
+      "question": "Is Okinawa a Blue Zone?",
+      "expected_pages": [
+        14
+      ],
+      "retrieved_pages": [
+        14,
+        69,
+        9,
+        78,
+        77,
+        15
+      ],
+      "retrieval_hit": 1.0,
+      "retrieval_recall": 1.0,
+      "retrieval_mrr": 1.0,
+      "key_facts": 1.0,
+      "declined": false,
+      "gen_pass": true,
+      "faithfulness": 1.0,
+      "faith_reason": "The context explicitly states Okinawa is one of the world\u2019s Blue Zones identified by Dan Buettner.",
+      "answer_preview": "Yes. Okinawa is recognized as one of the world\u2019s five \u201cBlue Zones\u201d \u2013 the regions identified by Dan\u202fBuettner where people live exceptionally long, healthy lives\u3010",
+      "error": null
+    },
+    {
+      "question": "What is the capital of France?",
+      "expected_pages": [],
+      "retrieved_pages": [],
+      "retrieval_hit": 0.0,
+      "retrieval_recall": 0.0,
+      "retrieval_mrr": 0.0,
+      "key_facts": 1.0,
+      "declined": true,
+      "gen_pass": true,
+      "faithfulness": -1.0,
+      "faith_reason": "skipped (--no-judge)",
+      "answer_preview": "The provided excerpt does not contain any information about the capital of France.",
+      "error": null
+    },
+    {
+      "question": "How do you tune a Formula 1 car's suspension?",
+      "expected_pages": [],
+      "retrieved_pages": [],
+      "retrieval_hit": 0.0,
+      "retrieval_recall": 0.0,
+      "retrieval_mrr": 0.0,
+      "key_facts": 1.0,
+      "declined": true,
+      "gen_pass": true,
+      "faithfulness": -1.0,
+      "faith_reason": "skipped (--no-judge)",
+      "answer_preview": "The excerpts you provided do not contain any information about tuning a Formula\u202f1 car\u2019s suspension.",
+      "error": null
+    },
+    {
+      "question": "What did the centenarians in the book celebrate, according to the authors?",
+      "expected_pages": [
+        10,
+        14
+      ],
+      "retrieved_pages": [
+        10,
+        68,
+        13,
+        58,
+        9,
+        116
+      ],
+      "retrieval_hit": 1.0,
+      "retrieval_recall": 0.5,
+      "retrieval_mrr": 1.0,
+      "key_facts": 1.0,
+      "declined": false,
+      "gen_pass": true,
+      "faithfulness": 0.5,
+      "faith_reason": "The answer correctly states that centenarians celebrate birthdays, which is supported by the context, but the extra details about specific a",
+      "answer_preview": "The authors note that the centenarians repeatedly **celebrate birthdays** \u2013 taking part in lively parties with songs, cake and dancing. In one visit the researc",
+      "error": null
+    },
+    {
+      "question": "What does ikigai bring to a person's life according to the book?",
+      "expected_pages": [
+        12,
+        13
+      ],
+      "retrieved_pages": [
+        14,
+        114,
+        13,
+        115,
+        113,
+        3
+      ],
+      "retrieval_hit": 1.0,
+      "retrieval_recall": 0.5,
+      "retrieval_mrr": 0.3333333333333333,
+      "key_facts": 1.0,
+      "declined": false,
+      "gen_pass": true,
+      "faithfulness": 1.0,
+      "faith_reason": "The answer\u2019s points about ikigai bringing purpose, meaning, satisfaction, happiness, a \u201chappy state of flow,\u201d passion/unique talent, and con",
+      "answer_preview": "The book describes ikigai as a source of **purpose and meaning** that enriches every day of a person\u2019s life.  It says that when you have a clearly defined ikiga",
+      "error": null
+    }
+  ]
+}
