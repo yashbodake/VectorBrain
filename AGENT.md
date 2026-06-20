@@ -27,6 +27,7 @@ Full product spec: `docs/01-product-overview.md`
 | `docs/05-rag-pipeline-spec.md` | Docling parsing, chunking, embeddings, retrieval, prompting |
 | `docs/06-frontend-spec.md` | Vue.js 3 component tree, state, API integration |
 | `docs/07-testing-deployment.md` | Test plan, env setup, run/deploy instructions |
+| `docs/08-gpu-and-ocr-plan.md` | Plan (not yet implemented): env-driven GPU support + OCR fallback for garbage-text PDFs |
 | `.claude/rules/coding-conventions.md` | Naming, error handling, style rules — applies to all code |
 | `.env.example` | Required environment variables |
 

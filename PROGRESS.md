@@ -82,4 +82,4 @@ _Log anything you changed from the original spec here, with a one-line reason. K
 
 _Anything that blocked you and needs a human decision. Don't silently guess on these._
 
-- _(none yet)_
+- **GPU support + OCR fallback** — plan written (`docs/08-gpu-and-ocr-plan.md`), not yet implemented. The local machine has an RTX 2050 (4GB) sitting idle because Phase 2 installed the CPU torch wheel. Adding GPU is a clean env-driven change (`DEVICE=auto`), verified feasible (cu124 torch+torchvision pair exists for cp313; Docling exposes `AcceleratorOptions`). Separately, the NCERT Class 10 Science PDF extracts as glyph garbage because Docling trusts its broken font-subsetted text layer — needs `OCR_FALLBACK=auto` (detect garbage → re-OCR) to fix. **Decision needed: do Part B (OCR fix, correctness) before Part A (GPU, speed)? Recommendation: B first.** No code written yet — awaiting go-ahead.
