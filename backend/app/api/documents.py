@@ -14,6 +14,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Response,
     UploadFile,
     status,
 )
@@ -141,7 +142,6 @@ async def get_document(
 
 @router.delete(
     "/{document_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a document and everything derived from it",
 )
 async def delete_document(
@@ -168,3 +168,8 @@ async def delete_document(
             Path(file_path).unlink(missing_ok=True)
         except OSError:
             pass
+
+    # Explicit empty 204 response. Returning None (implicit) with status_code=204
+    # works on newer FastAPI but asserts on 0.115.x ("204 must not have a response
+    # body"). Returning Response(status_code=204) is correct on both.
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
