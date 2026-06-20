@@ -22,9 +22,12 @@ NOISE_CHUNKS = [
     # p.3 — copyright page
     "New York, New York 10014 penguin.com\nCopyright © 2016 by Héctor García "
     "and Francesc Miralles\nTranslation copyright © 2017 by Penguin Random House LLC",
-    # p.6 — table of contents
-    "Title Page\nCopyright\nDedication\nEpigraph\nPrologue\nIkigai: A mysterious "
-    "word\nI. Ikigai\nThe art of staying young while growing old\nII. Antiaging Secrets",
+    # p.6 — table of contents. NOTE: Docling emits this with irregular
+    # whitespace ("Title   Page" with multiple spaces), so plain substring
+    # markers miss it. The structural _looks_like_toc detector catches it.
+    "Title   Page\nCopyright\nDedication\nEpigraph\nPrologue\nIkigai: A "
+    "mysterious word\nI. Ikigai\nThe art of staying young while growing old\n"
+    "II. Antiaging Secrets",
     # p.119 — bibliography / references page
     "The authors of Ikigai were greatly inspired by:\n"
     "- Breznitz, Shlomo, and Collins Hemingway. Maximum Brainpower. Ballantine Books, 2012.\n"
@@ -91,3 +94,28 @@ def test_citation_list_detector_requires_multiple_citations():
         "- Doe, A. Title Two. Publisher B, 2015.\n"
         "- Lee, K. Title Three. Publisher C, 2018."
     )
+
+
+def test_toc_detector_catches_stacked_short_titles_and_keeps_real_bullets():
+    """The TOC detector fires on a stack of short title-like lines (>=70% of
+    lines <40 chars) but NOT on a real bulleted list with longer item text."""
+    from app.services.chunking import _looks_like_toc
+
+    # TOC: many short lines (section titles). Docling whitespace is irregular.
+    toc = (
+        "Title   Page\nCopyright\nDedication\nEpigraph\nPrologue\n"
+        "Ikigai\n:   A   mysterious   word\nI.\nIkigai\n"
+        "The art of staying young while growing old"
+    )
+    assert _looks_like_toc(toc)
+
+    # Real bulleted list: items are full sentences (>40 chars each).
+    real_bullets = (
+        "The key practices of the Okinawan centenarians include:\n"
+        "- Eating a mostly plant-based diet with plenty of vegetables and tofu\n"
+        "- Maintaining strong social connections through community groups called moai\n"
+        "- Walking every day, often in the hills around their village\n"
+        "- Practicing moderation, stopping at eighty percent full"
+    )
+    assert not _looks_like_toc(real_bullets)
+    assert not _is_boilerplate(real_bullets)

@@ -128,18 +128,39 @@ def _is_boilerplate(content: str) -> bool:
 
     A chunk is boilerplate if it's very short (under ~40 chars of real text —
     headers/section dividers) OR contains a strong boilerplate marker OR looks
-    like a citation list (bibliography/references page). Kept conservative so
-    we never drop genuine content.
+    like a citation list (bibliography/references page) OR looks like a table of
+    contents (a stack of short title-like lines). Kept conservative so we never
+    drop genuine content.
     """
     stripped = content.strip()
     # Very short chunks are almost always headers/dividers, not content.
     real_len = sum(1 for c in stripped if not c.isspace())
     if real_len < 40:
         return True
-    low = content.lower()
-    if any(marker in low for marker in _BOILERPLATE_MARKERS):
+    # Whitespace-normalize for marker matching: Docling often emits "Title   Page"
+    # with runs of spaces, so collapse whitespace before substring checks.
+    low_flat = " ".join(content.lower().split())
+    flat_markers = tuple(" ".join(m.split()) for m in _BOILERPLATE_MARKERS)
+    if any(marker in low_flat for marker in flat_markers):
         return True
-    return _looks_like_citation_list(content)
+    return _looks_like_citation_list(content) or _looks_like_toc(content)
+
+
+def _looks_like_toc(content: str) -> bool:
+    """Detect a table-of-contents page: a stack of short title-like lines.
+
+    TOC chunks are distinctive: many short lines (section/chapter titles) with
+    little prose between them. Docling's whitespace is irregular ("Title   Page"
+    with multiple spaces), so plain substring markers miss them — this catches
+    them structurally. Heuristic: at least 6 non-empty lines, AND most (>=70%)
+    are short (<40 chars), AND the chunk has a low ratio of prose. Tuned to
+    catch the Ikigai TOC chunk (9/10 lines <40 chars) without firing on a real
+    bulleted list (which has longer item text)."""
+    lines = [ln.strip() for ln in content.splitlines() if ln.strip()]
+    if len(lines) < 6:
+        return False
+    short_lines = sum(1 for ln in lines if len(ln) < 40)
+    return short_lines >= len(lines) * 0.7
 
 
 # ---------------------------------------------------------------------------
