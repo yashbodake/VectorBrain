@@ -19,6 +19,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
+from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
 
@@ -47,7 +48,11 @@ def _build_converter() -> DocumentConverter:
         ),
     )
     return DocumentConverter(
-        format_options={PdfFormatOption(pipeline_options=pipeline_options)}
+        # format_options is a DICT keyed by InputFormat (not a set —
+        # PdfFormatOption is unhashable). Keying PDF only configures our
+        # accelerator/pipeline for PDF parsing; other formats fall back to
+        # Docling defaults (we only ingest PDFs anyway, per docs/01 scope).
+        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
     )
 
 
