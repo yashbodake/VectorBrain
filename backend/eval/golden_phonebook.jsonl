@@ -1,0 +1,7 @@
+{"question":"What is the phonebook application supposed to do?","expected_pages":[1,3],"reference_answer":"The phonebook application lets users add, view, update, and delete contacts. It also includes search functionality and pagination.","must_mention":["add","view","update","delete","contacts"]}
+{"question":"What database does the phonebook application use?","expected_pages":[2,3],"reference_answer":"The phonebook application uses MySQL. You install MySQL Server locally and create a database named phonebook_db.","must_mention":["mysql","phonebook_db"]}
+{"question":"What web framework does the backend use?","expected_pages":[1],"reference_answer":"The backend uses Ring as the HTTP server abstraction with Jetty as the embedded server, and Reitit for routing.","must_mention":["ring","jetty","reitit"]}
+{"question":"What does the frontend use?","expected_pages":[2],"reference_answer":"The frontend is built with ClojureScript using Shadow-cljs, Reagent (a React wrapper) for the UI, and Re-frame for state management.","must_mention":["clojurescript","reagent","re-frame"]}
+{"question":"How does the backend connect to the database?","expected_pages":[2,3],"reference_answer":"The Clojure backend connects to the local MySQL instance via next.jdbc with HikariCP connection pooling.","must_mention":["next.jdbc","hikaricp"]}
+{"question":"What is the capital of France?","expected_pages":[],"reference_answer":"","must_mention":[]}
+{"question":"How do you bake sourdough bread?","expected_pages":[],"reference_answer":"","must_mention":[]}

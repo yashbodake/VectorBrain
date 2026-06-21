@@ -1,33 +1,28 @@
-"""RAG evaluation harness for VectorBrain.
+"""RAG evaluation harness for VectorBrain — the 4 core RAGAS-style metrics.
 
-Runs a golden question set against the live /api/chat endpoint and scores:
-  RETRIEVAL (independent of the answer text):
-    - hit_rate: did ANY retrieved source come from an expected page?
-    - recall@k: fraction of expected pages that appeared in retrieved sources
-    - mrr: reciprocal rank of the first expected-page hit (1/rank)
-  GENERATION:
-    - faithfulness: does the answer only use facts present in the retrieved
-      context? (LLM-as-judge via Cerebras)
-    - contains_key_facts: did the answer mention the must_mention terms?
-    - declined_correctly: for off-topic questions (expected_pages=[]), did the
-      system decline rather than hallucinate? (counts as a PASS for those rows)
+Scores both halves of the RAG pipeline independently (so a bad score tells you
+WHICH stage to fix):
+
+  RETRIEVAL (did we fetch the right context?):
+    - context_precision : of the retrieved chunks, how many are actually
+                          relevant to answering the question? (penalizes noise)
+    - context_recall    : of the information needed to answer (from the
+                          reference answer), how much is present in the
+                          retrieved context? (penalizes missing the answer)
+
+  GENERATION (did the LLM produce a good answer from that context?):
+    - faithfulness      : is every claim in the answer supported by the
+                          retrieved context? (1.0 = no hallucination)
+    - response_relevance: does the answer actually address the question?
+                          (1.0 = fully on-topic; penalizes vague/off-topic)
+
+All four are computed via an LLM-as-judge (Cerebras, via the app's config).
+Retrieval also gets page-level hit_rate/recall/MRR for free (deterministic,
+no LLM) from the expected_pages in the golden set.
 
 Usage:
-    # backend running on :8000 with at least one doc ready
-    python eval/run_eval.py
-    python eval/run_eval.py --api http://localhost:8000 --golden eval/golden.jsonl
-
-The golden set is eval/golden.jsonl: one JSON object per line with
-question, expected_pages (list of page numbers that contain the answer),
-reference_facts, and must_mention (lowercase tokens the answer should contain).
-
-Design notes:
-- Retrieval is scored from the sources/citations in the SSE done-event, NOT by
-  re-embedding, so it measures the real retrieval the user sees.
-- Faithfulness uses Cerebras (the configured LLM) as a judge — mock it by
-  setting --no-judge for a retrieval-only run if you don't want to spend calls.
-- This is a Lite eval (handful of questions, LLM-judge), not RAGAS/TruLens —
-  see the "how to evaluate RAG" notes. Good enough to tune top_k/threshold.
+    python eval/run_eval.py --golden eval/golden_phonebook.jsonl
+    python eval/run_eval.py --no-judge   # skip LLM metrics, retrieval-only
 """
 
 from __future__ import annotations
@@ -42,9 +37,6 @@ from pathlib import Path
 API_DEFAULT = "http://localhost:8000"
 
 
-# ---------------------------------------------------------------------------
-# Golden set loading
-# ---------------------------------------------------------------------------
 def load_golden(path: Path) -> list[dict]:
     out = []
     for line in path.read_text().splitlines():
@@ -54,13 +46,8 @@ def load_golden(path: Path) -> list[dict]:
     return out
 
 
-# ---------------------------------------------------------------------------
-# Hit the live /api/chat and capture: tokens, citations (per-chunk), sources (deduped)
-# ---------------------------------------------------------------------------
-def run_query(api: str, question: str, document_ids: list[int] | None = None) -> dict:
+def run_query(api: str, question: str) -> dict:
     body = {"question": question}
-    if document_ids:
-        body["document_ids"] = document_ids
     req = urllib.request.Request(
         f"{api}/api/chat",
         data=json.dumps(body).encode(),
@@ -89,22 +76,14 @@ def run_query(api: str, question: str, document_ids: list[int] | None = None) ->
     return {"answer": "".join(tokens), "citations": citations, "sources": sources, "error": error}
 
 
-# ---------------------------------------------------------------------------
-# Retrieval scoring (from the sources array — deduped per page)
-# ---------------------------------------------------------------------------
-def score_retrieval(sources: list[dict], expected_pages: set[int]) -> dict:
+def score_retrieval_pages(sources, expected_pages):
     if not expected_pages:
-        # Off-topic question: retrieval "should" be empty. If it is, that's a
-        # perfect retrieval result (didn't fetch junk). If not, it fetched noise.
         empty = len(sources) == 0
         return {"hit": 1.0 if empty else 0.0, "recall": 1.0 if empty else 0.0, "mrr": 1.0 if empty else 0.0}
     retrieved_pages = [s.get("page_number") for s in sources if s.get("page_number") is not None]
-    # hit: any expected page appeared at all
     hits = [p for p in retrieved_pages if p in expected_pages]
     hit = 1.0 if hits else 0.0
-    # recall: fraction of expected pages covered (cap at the k we retrieved)
     recall = len(set(hits)) / len(expected_pages)
-    # mrr: 1/rank of the first expected-page hit
     mrr = 0.0
     for rank, p in enumerate(retrieved_pages, start=1):
         if p in expected_pages:
@@ -113,171 +92,229 @@ def score_retrieval(sources: list[dict], expected_pages: set[int]) -> dict:
     return {"hit": hit, "recall": recall, "mrr": mrr, "retrieved_pages": retrieved_pages}
 
 
-# ---------------------------------------------------------------------------
-# Generation scoring
-# ---------------------------------------------------------------------------
-def score_contains_key_facts(answer: str, must_mention: list[str]) -> float:
-    """Fraction of must_mention lowercase tokens present in the answer."""
-    if not must_mention:
-        return 1.0
-    low = answer.lower()
-    present = sum(1 for term in must_mention if term.lower() in low)
-    return present / len(must_mention)
+_JUDGE_CLIENT = None
+_CFG = None
 
 
-def is_decline(answer: str) -> bool:
-    """Did the system give a canned 'couldn't find anything' decline?"""
-    low = answer.lower()
-    return ("couldn't find" in low) or ("don't contain" in low) or ("not contain" in low) or ("no documents are ready" in low)
+def _judge_client():
+    global _JUDGE_CLIENT, _CFG
+    if _JUDGE_CLIENT is None:
+        from openai import OpenAI
+        _CFG = _load_env()
+        _JUDGE_CLIENT = OpenAI(api_key=_CFG["CEREBRAS_API_KEY"], base_url=_CFG["CEREBRAS_BASE_URL"])
+    return _JUDGE_CLIENT, _CFG
 
 
-def faithfulness_judge(api: str, question: str, answer: str, context_chunks: list[str]) -> tuple[float, str]:
-    """LLM-as-judge: does the answer only use facts present in the context?
-
-    Returns (score 0..1, reasoning). Uses Cerebras via the app's own config —
-    but to avoid importing the app (heavy), we call the judge model through the
-    same OpenAI-compatible endpoint configured in the env.
-
-    Score: 1.0 = fully supported, 0.5 = partly, 0.0 = hallucinated/unsupported.
-    """
-    # Read config the same way the app does (but without importing app).
-    import os
-    from openai import OpenAI
-
-    cfg = _load_env()
-    client = OpenAI(api_key=cfg["CEREBRAS_API_KEY"], base_url=cfg["CEREBRAS_BASE_URL"])
-    context = "\n\n".join(f"[{i+1}] {c[:600]}" for i, c in enumerate(context_chunks[:6])) or "(no context retrieved)"
-    prompt = (
-        "You are an evaluator. Judge whether the ANSWER is supported by the CONTEXT only.\n"
-        "Return EXACTLY one line: SCORE|REASON, where SCORE is 1.0 (fully supported), "
-        "0.5 (partly supported), or 0.0 (mostly unsupported / hallucinated).\n\n"
-        f"QUESTION: {question}\n\nCONTEXT:\n{context}\n\nANSWER: {answer}\n\nJudge:"
-    )
+def _judge(prompt):
+    client, c = _judge_client()
     try:
         resp = client.chat.completions.create(
-            model=cfg["CEREBRAS_MODEL"],
+            model=c["CEREBRAS_MODEL"],
             messages=[{"role": "user", "content": prompt}],
             stream=False,
             temperature=0.0,
         )
         out = (resp.choices[0].message.content or "").strip()
-        m = re.match(r"\s*([01](?:\.\d+)?)\s*[|]\s*(.+)", out)
+        m = re.search(r"([01](?:\.\d+)?)\s*[|/]\s*(.+)", out)
         if m:
             return float(m.group(1)), m.group(2)
-        return 0.5, f"unparseable judge output: {out[:120]}"
-    except Exception as e:  # noqa: BLE001
+        m2 = re.search(r"\b(1(?:\.0)?|0(?:\.\d+)?)\b", out)
+        if m2:
+            return float(m2.group(1)), out[:140]
+        return 0.5, f"unparseable: {out[:120]}"
+    except Exception as e:
         return -1.0, f"judge error: {e}"
 
 
-def _load_env() -> dict:
-    """Load just the Cerebras config from the repo .env (no app import)."""
+def _ctx_block(contexts):
+    return "\n\n".join(f"[{i+1}] {c[:500]}" for i, c in enumerate(contexts[:6])) or "(no context retrieved)"
+
+
+def context_precision(question, contexts):
+    prompt = (
+        "You are evaluating a RAG retrieval step. For EACH numbered chunk below, "
+        "judge whether it is RELEVANT to answering the QUESTION (would help answer it).\n"
+        "Then output the FRACTION of chunks that are relevant as a score 0.0 to 1.0.\n"
+        "Format: SCORE|brief reason. Example: 0.67|2 of 3 chunks relevant.\n\n"
+        f"QUESTION: {question}\n\nCHUNKS:\n{_ctx_block(contexts)}\n\nScore:"
+    )
+    return _judge(prompt)
+
+
+def context_recall(question, reference_answer, contexts):
+    prompt = (
+        "You are evaluating a RAG retrieval step. Given the REFERENCE ANSWER and "
+        "the retrieved CONTEXT, what fraction of the claims in the reference answer "
+        "can be ATTRIBUTED to the context? (is the info there to support the answer?)\n"
+        "Score 1.0 = fully attributable, 0.5 = partly, 0.0 = none of it.\n"
+        "Format: SCORE|brief reason.\n\n"
+        f"QUESTION: {question}\n\nREFERENCE ANSWER: {reference_answer}\n\n"
+        f"CONTEXT:\n{_ctx_block(contexts)}\n\nScore:"
+    )
+    return _judge(prompt)
+
+
+def faithfulness(question, answer, contexts):
+    prompt = (
+        "You are evaluating a RAG answer. Judge whether every claim in the ANSWER "
+        "is SUPPORTED by the CONTEXT (no outside knowledge, no invention).\n"
+        "Score 1.0 = fully supported, 0.5 = partly supported, 0.0 = mostly unsupported.\n"
+        "Format: SCORE|brief reason.\n\n"
+        f"QUESTION: {question}\n\nCONTEXT:\n{_ctx_block(contexts)}\n\nANSWER: {answer}\n\nJudge:"
+    )
+    return _judge(prompt)
+
+
+def response_relevance(question, answer):
+    prompt = (
+        "You are evaluating a RAG answer. Does the ANSWER directly and completely "
+        "address the QUESTION? (Not whether it's true - just whether it's relevant "
+        "and complete as an answer to what was asked.)\n"
+        "Score 1.0 = directly answers, 0.5 = partial/vague, 0.0 = doesn't address it.\n"
+        "Format: SCORE|brief reason.\n\n"
+        f"QUESTION: {question}\n\nANSWER: {answer}\n\nScore:"
+    )
+    return _judge(prompt)
+
+
+def _load_env():
     env = Path(__file__).resolve().parents[2] / ".env"
-    cfg = {}
+    e = {}
     if env.exists():
         for line in env.read_text().splitlines():
             if "=" in line and not line.strip().startswith("#"):
                 k, v = line.split("=", 1)
-                cfg[k.strip()] = v.strip()
+                e[k.strip()] = v.strip()
     return {
-        "CEREBRAS_API_KEY": cfg.get("CEREBRAS_API_KEY", ""),
-        "CEREBRAS_BASE_URL": cfg.get("CEREBRAS_BASE_URL", "https://api.cerebras.ai/v1"),
-        "CEREBRAS_MODEL": cfg.get("CEREBRAS_MODEL", "gpt-oss-120b"),
+        "CEREBRAS_API_KEY": e.get("CEREBRAS_API_KEY", ""),
+        "CEREBRAS_BASE_URL": e.get("CEREBRAS_BASE_URL", "https://api.cerebras.ai/v1"),
+        "CEREBRAS_MODEL": e.get("CEREBRAS_MODEL", "gpt-oss-120b"),
     }
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-def main() -> int:
-    ap = argparse.ArgumentParser()
+def is_decline(answer):
+    low = answer.lower()
+    return any(p in low for p in ["couldn't find", "don't contain", "not contain", "no documents are ready"])
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--api", default=API_DEFAULT)
-    ap.add_argument("--golden", default=str(Path(__file__).parent / "golden.jsonl"))
-    ap.add_argument("--no-judge", action="store_true", help="skip LLM faithfulness judge")
+    ap.add_argument("--golden", default=str(Path(__file__).parent / "golden_phonebook.jsonl"))
+    ap.add_argument("--no-judge", action="store_true")
     args = ap.parse_args()
 
     golden = load_golden(Path(args.golden))
-    print(f"\n=== RAG eval: {len(golden)} questions vs {args.api} ===\n")
+    print(f"\n=== RAG eval: {len(golden)} questions vs {args.api} ===")
+    print(f"=== Metrics: context_precision | context_recall | faithfulness | response_relevance ===\n")
 
     rows = []
     for i, item in enumerate(golden, 1):
         q = item["question"]
         expected = set(item.get("expected_pages", []))
+        ref = item.get("reference_answer", "")
         print(f"[{i}/{len(golden)}] Q: {q}")
+
         result = run_query(args.api, q)
         answer = result["answer"]
         sources = result["sources"]
-        ret = score_retrieval(sources, expected)
-        key_facts = score_contains_key_facts(answer, item.get("must_mention", []))
+        contexts = [c.get("excerpt", "") for c in result["citations"]]
         declined = is_decline(answer)
+        ret = score_retrieval_pages(sources, expected)
+        is_off_topic = not expected
 
-        # Generation correctness for off-topic: declining IS the right answer.
-        gen_pass = None
-        if not expected:
-            gen_pass = declined  # should decline
-        else:
-            # On-topic: must not decline AND should contain key facts.
-            gen_pass = (not declined) and (key_facts >= 0.5)
+        cp, cp_r = (-1.0, "skipped")
+        cr, cr_r = (-1.0, "skipped")
+        faith, faith_r = (-1.0, "skipped")
+        rel, rel_r = (-1.0, "skipped")
 
-        faith, faith_reason = (-1.0, "skipped (--no-judge)")
-        if not args.no_judge and expected and not declined:
-            # Use the per-chunk citations' excerpts as the judge's context.
-            ctx = [c.get("excerpt", c.get("content", "")) for c in result["citations"]]
-            faith, faith_reason = faithfulness_judge(args.api, q, answer, ctx)
+        if not args.no_judge:
+            if is_off_topic:
+                if declined:
+                    cp = cr = faith = rel = 1.0
+                    cp_r = cr_r = faith_r = rel_r = "correctly declined"
+                else:
+                    faith, faith_r = faithfulness(q, answer, contexts)
+                    rel, rel_r = response_relevance(q, answer)
+                    cp = cr = 0.0
+                    cp_r = cr_r = "off-topic, should have declined"
+            else:
+                cp, cp_r = context_precision(q, contexts)
+                if ref:
+                    cr, cr_r = context_recall(q, ref, contexts)
+                else:
+                    cr, cr_r = (-1.0, "no reference_answer in golden")
+                if declined:
+                    faith, faith_r = (0.0, "declined on-topic question")
+                    rel, rel_r = (0.0, "declined on-topic question")
+                else:
+                    faith, faith_r = faithfulness(q, answer, contexts)
+                    rel, rel_r = response_relevance(q, answer)
 
         row = {
             "question": q,
+            "off_topic": is_off_topic,
             "expected_pages": sorted(expected),
             "retrieved_pages": ret.get("retrieved_pages", []),
-            "retrieval_hit": ret["hit"],
-            "retrieval_recall": ret["recall"],
-            "retrieval_mrr": ret["mrr"],
-            "key_facts": round(key_facts, 2),
-            "declined": declined,
-            "gen_pass": gen_pass,
+            "page_hit_rate": ret["hit"],
+            "page_recall": ret["recall"],
+            "page_mrr": ret["mrr"],
+            "context_precision": round(cp, 2),
+            "context_recall": round(cr, 2),
             "faithfulness": round(faith, 2),
-            "faith_reason": faith_reason[:140],
-            "answer_preview": answer[:160].replace("\n", " "),
-            "error": result["error"],
+            "response_relevance": round(rel, 2),
+            "declined": declined,
+            "cp_reason": cp_r[:120],
+            "cr_reason": cr_r[:120],
+            "faith_reason": faith_r[:120],
+            "rel_reason": rel_r[:120],
+            "answer_preview": answer[:200].replace("\n", " "),
         }
         rows.append(row)
-        status = "✓" if (gen_pass and ret["hit"] > 0 if expected else gen_pass) else "✗"
-        print(f"   {status} ret_hit={ret['hit']:.0f} recall={ret['recall']:.2f} mrr={ret['mrr']:.2f} "
-              f"keyfacts={key_facts:.2f} declined={declined} faith={faith:.2f}")
+
+        scored = [v for v in [cp, cr, faith, rel] if v >= 0]
+        ok = (all(v >= 0.5 for v in scored) if scored and not args.no_judge else ret["hit"] > 0)
+        status = "ok" if ok else "X "
+        print(f"   {status} ctx_prec={cp:.2f} ctx_rec={cr:.2f} faith={faith:.2f} rel={rel:.2f} | "
+              f"page_hit={ret['hit']:.0f} page_recall={ret['recall']:.2f}")
         if result["error"]:
             print(f"      error: {result['error']}")
 
-    # Aggregate
-    n = len(rows)
-    on_topic = [r for r in rows if r["expected_pages"]]
-    off_topic = [r for r in rows if not r["expected_pages"]]
+    on_topic = [r for r in rows if not r["off_topic"]]
+    off_topic = [r for r in rows if r["off_topic"]]
 
     def avg(xs, key):
         xs = [x for x in xs if x[key] >= 0]
-        return sum(x[key] for x in xs) / len(xs) if xs else 0.0
+        return sum(x[key] for x in xs) / len(xs) if xs else float("nan")
 
-    print("\n=== SUMMARY ===")
-    print(f"  retrieval hit_rate  : {avg(on_topic,'retrieval_hit'):.2f}  (on-topic n={len(on_topic)})")
-    print(f"  retrieval recall@k  : {avg(on_topic,'retrieval_recall'):.2f}")
-    print(f"  retrieval MRR       : {avg(on_topic,'retrieval_mrr'):.2f}")
-    print(f"  key-facts coverage  : {avg(on_topic,'key_facts'):.2f}")
-    judged = [r for r in on_topic if r["faithfulness"] >= 0]
-    if judged:
-        print(f"  faithfulness (LLM)  : {avg(judged,'faithfulness'):.2f}  (n={len(judged)})")
-    print(f"  off-topic declined  : {sum(r['gen_pass'] for r in off_topic)}/{len(off_topic)} (should decline)")
-    gen_correct = sum(1 for r in rows if r["gen_pass"])
-    print(f"  overall gen pass    : {gen_correct}/{n}")
+    print("\n" + "=" * 55)
+    print("  RAG EVAL SUMMARY (4 core metrics)")
+    print("=" * 55)
+    print("\n  RETRIEVAL (did we fetch the right context?)")
+    print(f"    context_precision : {avg(on_topic,'context_precision'):.2f}")
+    print(f"    context_recall    : {avg(on_topic,'context_recall'):.2f}")
+    print(f"    [page hit_rate    : {avg(on_topic,'page_hit_rate'):.2f}]")
+    print(f"    [page recall@k    : {avg(on_topic,'page_recall'):.2f}]")
+    print(f"    [page MRR         : {avg(on_topic,'page_mrr'):.2f}]")
+    print("\n  GENERATION (did the LLM answer well?)")
+    print(f"    faithfulness      : {avg(on_topic,'faithfulness'):.2f}")
+    print(f"    response_relevance: {avg(on_topic,'response_relevance'):.2f}")
+    if off_topic:
+        declined_ok = sum(1 for r in off_topic if r["declined"])
+        print(f"\n  OFF-TOPIC (should decline): {declined_ok}/{len(off_topic)} correctly declined")
+    print("=" * 55)
 
-    # Write detailed results
     out = Path(__file__).parent / "results.json"
     out.write_text(json.dumps({"summary": {
-        "hit_rate": avg(on_topic, "retrieval_hit"),
-        "recall_at_k": avg(on_topic, "retrieval_recall"),
-        "mrr": avg(on_topic, "retrieval_mrr"),
-        "key_facts": avg(on_topic, "key_facts"),
-        "faithfulness": avg(judged, "faithfulness") if judged else None,
-        "off_topic_declined": sum(r["gen_pass"] for r in off_topic) if off_topic else None,
-        "overall_gen_pass": gen_correct,
-        "n": n,
+        "context_precision": avg(on_topic, "context_precision"),
+        "context_recall": avg(on_topic, "context_recall"),
+        "faithfulness": avg(on_topic, "faithfulness"),
+        "response_relevance": avg(on_topic, "response_relevance"),
+        "page_hit_rate": avg(on_topic, "page_hit_rate"),
+        "page_recall": avg(on_topic, "page_recall"),
+        "page_mrr": avg(on_topic, "page_mrr"),
+        "off_topic_declined": sum(1 for r in off_topic if r["declined"]) if off_topic else None,
+        "n": len(rows),
     }, "rows": rows}, indent=2))
     print(f"\n  detailed results -> {out}")
     return 0
