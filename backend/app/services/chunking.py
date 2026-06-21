@@ -126,20 +126,22 @@ def _looks_like_citation_list(content: str) -> bool:
 
 
 def _looks_like_footnotes(content: str) -> bool:
-    """Detect a footnotes/endnotes page: lines that start with '- 1', '- 2',
-    etc. followed by author/title text. Ikigai's endnotes look like:
-        '- 1 Dan Buettner. The Blue Zones: Lessons for Living Longer...'
-        '- 1 Eduard Punset. Interview with Shlomo Breznitz...'
-    These embed close to topical queries (they contain the keywords + author
-    names) but add no answer value. Heuristic: >=3 lines matching the
-    footnote-number pattern."""
+    """Detect a footnotes/endnotes chunk.
+
+    Docling merges endnote pages into single chunks where the text starts with
+    '- 1\\t\\t\\tDan Buettner...' (dash, number, TAB, author name). The TAB after
+    the number is the unambiguous signature — bullet-list items like '- 1 apple'
+    use spaces, not tabs. So we check if the chunk STARTS with this pattern.
+
+    This catches footnote/endnote chunks regardless of how Docling splits them
+    into lines (it often merges multiple notes into one tab-separated paragraph).
+    """
     import re
 
-    # Match '- 1' or '- 12' at start of a line (after stripping).
-    footnote_re = re.compile(r"^-\s*\d+\s+\S")
-    lines = [ln.strip() for ln in content.splitlines() if len(ln.strip()) > 15]
-    footnote_lines = sum(1 for ln in lines if footnote_re.match(ln))
-    return footnote_lines >= 3 and footnote_lines >= len(lines) * 0.5
+    # ^-\s*\d+\t : dash, optional spaces, number, then a TAB. The tab is key —
+    # it distinguishes Docling's endnote format ('- 1\\t\\t\\tAuthor') from real
+    # bullet lists ('- 1 apple'). Compiled once per call (cheap).
+    return bool(re.match(r"^-\s*\d+\t", content.lstrip()))
 
 
 def _is_boilerplate(content: str) -> bool:
