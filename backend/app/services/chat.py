@@ -97,7 +97,7 @@ async def stream_chat(
         embeddings.encode_query, question
     )
     chunks = await retrieval.search_chunks(
-        session, query_embedding.tolist(), document_ids=document_ids
+        session, query_embedding.tolist(), document_ids=document_ids, question=question
     )
     if not chunks:
         # Branch 2: nothing relevant above the threshold. Decline, skip the LLM

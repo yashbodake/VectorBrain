@@ -1,114 +1,152 @@
 {
   "summary": {
-    "context_precision": 0.49800000000000005,
-    "context_recall": 0.8,
+    "context_precision": 0.45,
+    "context_recall": 0.7,
     "faithfulness": 0.7,
     "response_relevance": 1.0,
     "page_hit_rate": 1.0,
-    "page_recall": 0.6333333333333333,
-    "page_mrr": 0.7066666666666667,
-    "off_topic_declined": 2,
+    "page_recall": 1.0,
+    "page_mrr": 0.7666666666666667,
+    "off_topic_declined": 1,
     "n": 7
   },
   "rows": [
     {
-      "question": "What is the meaning of the word ikigai?",
+      "question": "What is the phonebook application supposed to do?",
       "off_topic": false,
       "expected_pages": [
-        12,
-        13,
-        14
+        1,
+        3
       ],
       "retrieved_pages": [
-        14,
-        114,
-        13,
-        113,
-        12
+        1,
+        3,
+        2
       ],
       "page_hit_rate": 1.0,
       "page_recall": 1.0,
       "page_mrr": 1.0,
-      "context_precision": 0.83,
+      "context_precision": 0.5,
       "context_recall": 1.0,
       "faithfulness": 1.0,
       "response_relevance": 1.0,
       "declined": false,
-      "cp_reason": "5 of 6 chunks relevant.",
-      "cr_reason": "All three statements in the reference answer are directly supported: the context defines ikigai as \u201clife\u201d + \u201cto be worth",
-      "faith_reason": "All statements about the components of ikigai, their meanings, and the comparison to \u201craison d\u2019\u00eatre\u201d are directly backed",
-      "rel_reason": "The answer explains the literal components and gives the overall meaning (\u201ca reason to live\u201d/purpose), directly and full",
-      "answer_preview": "**Ikigai** (\u751f\u304d\u7532\u6590) is formed from two Japanese words:    - **\u751f\u304d** (*iki*) \u2013 \u201clife,\u201d   - **\u7532\u6590** (*gai*) \u2013 \u201cworthwhile\u201d or \u201cvalue\u201d (the character \u7532 also conveys ideas of leadership or being first, and \u6590 "
+      "cp_reason": "2 of 4 chunks relevant.",
+      "cr_reason": "All elements of the reference answer (add/view/update/delete contacts, search functionality, pagination) are explicitly ",
+      "faith_reason": "All statements (CRUD operations, search by name/phone, pagination for large datasets) are directly supported by the prov",
+      "rel_reason": "The answer lists the core functions (add, view, update, delete) plus search and pagination, directly and comprehensively",
+      "answer_preview": "The phonebook application is intended to provide a full\u2011set of CRUD operations for contacts\u2014users should be able to **add, view, update, and delete contacts**\u30101\u3011.    In addition, it should include:  *"
     },
     {
-      "question": "Where do the authors travel to study longevity and ikigai?",
+      "question": "What database does the phonebook application use?",
       "off_topic": false,
       "expected_pages": [
-        9,
-        14,
-        39,
-        65,
-        66,
-        70
+        2,
+        3
       ],
       "retrieved_pages": [
-        13,
-        64,
-        10,
-        8,
-        70,
-        71
+        1,
+        3,
+        2
       ],
       "page_hit_rate": 1.0,
-      "page_recall": 0.16666666666666666,
-      "page_mrr": 0.2,
-      "context_precision": 0.33,
+      "page_recall": 1.0,
+      "page_mrr": 0.5,
+      "context_precision": 0.75,
+      "context_recall": 1.0,
+      "faithfulness": 1.0,
+      "response_relevance": 1.0,
+      "declined": false,
+      "cp_reason": "Chunks 1,\u202f3,\u202fand\u202f4 mention MySQL as the database, while chunk\u202f2 does not specify the database type.",
+      "cr_reason": "All three statements (uses MySQL, install MySQL Server locally, create a database named\u202fphonebook_db) are directly menti",
+      "faith_reason": "The answer states the phonebook app uses MySQL, which is directly confirmed by multiple context excerpts (e.g., \u201cbackend",
+      "rel_reason": "The answer directly states that the phonebook application uses MySQL, fully addressing the asked question.",
+      "answer_preview": "The phonebook application uses **MySQL** as its database.\u202f[1][3][4]"
+    },
+    {
+      "question": "What web framework does the backend use?",
+      "off_topic": false,
+      "expected_pages": [
+        1
+      ],
+      "retrieved_pages": [
+        1,
+        3,
+        2
+      ],
+      "page_hit_rate": 1.0,
+      "page_recall": 1.0,
+      "page_mrr": 1.0,
+      "context_precision": 0.0,
+      "context_recall": 0.0,
+      "faithfulness": 0.0,
+      "response_relevance": 1.0,
+      "declined": false,
+      "cp_reason": "none of the four chunks mention the backend web framework.",
+      "cr_reason": "The context contains only general project requirements and mentions Clojure, MySQL, and Re-frame, but it does not mentio",
+      "faith_reason": "The provided context never mentions Reitit or any specific web framework for the backend; therefore the claim is unsuppo",
+      "rel_reason": "The answer directly names Reitit as the backend\u2019s web framework, fully addressing the question.",
+      "answer_preview": "The backend defines its HTTP API routes with **Reitit**, a Clojure routing library used to build the web service\u202f[4]."
+    },
+    {
+      "question": "What does the frontend use?",
+      "off_topic": false,
+      "expected_pages": [
+        2
+      ],
+      "retrieved_pages": [
+        3,
+        1,
+        2
+      ],
+      "page_hit_rate": 1.0,
+      "page_recall": 1.0,
+      "page_mrr": 0.3333333333333333,
+      "context_precision": 0.75,
+      "context_recall": 1.0,
+      "faithfulness": 1.0,
+      "response_relevance": 1.0,
+      "declined": false,
+      "cp_reason": "3 of 4 chunks relevant.",
+      "cr_reason": "The context explicitly states that the frontend uses ClojureScript, Shadow\u2011cljs, Reagent (a React wrapper), and Re\u2011frame",
+      "faith_reason": "All four components (ClojureScript, Reagent, Re-frame, Shadow\u2011cljs) are explicitly mentioned in the provided excerpts as",
+      "rel_reason": "The answer directly lists the technologies the frontend uses, fully addressing the question.",
+      "answer_preview": "The frontend is built with:  - **ClojureScript** \u2013 the language used for the client side\u202f[2]   - **Reagent** \u2013 a minimal React wrapper for the UI\u202f[3]   - **Re-frame** \u2013 for state management in the fro"
+    },
+    {
+      "question": "How does the backend connect to the database?",
+      "off_topic": false,
+      "expected_pages": [
+        2,
+        3
+      ],
+      "retrieved_pages": [
+        2,
+        3,
+        1
+      ],
+      "page_hit_rate": 1.0,
+      "page_recall": 1.0,
+      "page_mrr": 1.0,
+      "context_precision": 0.25,
       "context_recall": 0.5,
       "faithfulness": 0.5,
       "response_relevance": 1.0,
       "declined": false,
-      "cp_reason": "2 of 6 chunks relevant.",
-      "cr_reason": "The context confirms the authors were in Ogimi, but it does not provide the details about its location, Guinness record,",
-      "faith_reason": "The answer correctly notes that the authors spent time in Ogimi and conducted interviews about ikigai and longevity (sup",
-      "rel_reason": "The answer directly states the location (Okinawa, Japan \u2013 the village of Ogimi) where the authors travel to study longev",
-      "answer_preview": "The authors went to **Okinawa, Japan \u2013 specifically the village of\u202fOgimi on the island of Okinawa** \u2013 to interview long\u2011lived residents and learn how ikigai and other lifestyle factors contribute to t"
-    },
-    {
-      "question": "Is Okinawa a Blue Zone?",
-      "off_topic": false,
-      "expected_pages": [
-        14
-      ],
-      "retrieved_pages": [
-        14,
-        69,
-        9,
-        78,
-        77,
-        15
-      ],
-      "page_hit_rate": 1.0,
-      "page_recall": 1.0,
-      "page_mrr": 1.0,
-      "context_precision": 0.33,
-      "context_recall": 1.0,
-      "faithfulness": 1.0,
-      "response_relevance": 1.0,
-      "declined": false,
-      "cp_reason": "Chunks\u202f1 and\u202f3 discuss Okinawa\u2019s status as a Blue Zone (or its extreme longevity), the other chunks do not address the B",
-      "cr_reason": "Both claims (\u201cOkinawa holds first place among the world\u2019s Blue Zones\u201d and \u201cOkinawan women in particular live longer and ",
-      "faith_reason": "The answer\u2019s claim that Okinawa is one of the five Blue Zones and holds the top spot is directly stated in context [1].",
-      "rel_reason": "The answer directly answers the question with a clear \u201cYes\u201d and adds relevant supporting detail.",
-      "answer_preview": "Yes\u2014Okinawa is recognized as one of the world\u2019s five Blue Zones, even holding the top spot among them\u30101\u3011."
+      "cp_reason": "1 of 4 chunks relevant.",
+      "cr_reason": "The context confirms that the Clojure backend connects to a local MySQL instance, but it does not mention using next.jdb",
+      "faith_reason": "The first claim about using DB_HOST, DB_NAME, DB_USER, DB_PASSWORD in a config file or env vars is supported by context ",
+      "rel_reason": "The answer directly explains that the backend uses connection details (host, name, user, password) from a config file or",
+      "answer_preview": "The backend is set up to point at the local MySQL server by providing the connection details (such as\u202fDB_HOST,\u202fDB_NAME,\u202fDB_USER,\u202fDB_PASSWORD) in a configuration file or via environment variables\u202f[1]. "
     },
     {
       "question": "What is the capital of France?",
       "off_topic": true,
       "expected_pages": [],
       "retrieved_pages": [],
-      "page_hit_rate": 0.0,
-      "page_recall": 0.0,
-      "page_mrr": 0.0,
+      "page_hit_rate": 1.0,
+      "page_recall": 1.0,
+      "page_mrr": 1.0,
       "context_precision": 1.0,
       "context_recall": 1.0,
       "faithfulness": 1.0,
@@ -118,83 +156,26 @@
       "cr_reason": "correctly declined",
       "faith_reason": "correctly declined",
       "rel_reason": "correctly declined",
-      "answer_preview": "The provided excerpts do not contain information about the capital of France."
+      "answer_preview": "I couldn't find anything relevant in your uploaded documents for that. Try rephrasing, or upload documents that cover the topic."
     },
     {
-      "question": "How do you tune a Formula 1 car's suspension?",
+      "question": "How do you bake sourdough bread?",
       "off_topic": true,
       "expected_pages": [],
       "retrieved_pages": [],
       "page_hit_rate": 0.0,
       "page_recall": 0.0,
       "page_mrr": 0.0,
-      "context_precision": 1.0,
-      "context_recall": 1.0,
+      "context_precision": 0.0,
+      "context_recall": 0.0,
       "faithfulness": 1.0,
-      "response_relevance": 1.0,
-      "declined": true,
-      "cp_reason": "correctly declined",
-      "cr_reason": "correctly declined",
-      "faith_reason": "correctly declined",
-      "rel_reason": "correctly declined",
-      "answer_preview": "The excerpts you provided do not contain any information about tuning a Formula\u202f1 car\u2019s suspension."
-    },
-    {
-      "question": "What did the centenarians in the book celebrate, according to the authors?",
-      "off_topic": false,
-      "expected_pages": [
-        10,
-        14
-      ],
-      "retrieved_pages": [
-        10,
-        68,
-        13,
-        58,
-        9,
-        116
-      ],
-      "page_hit_rate": 1.0,
-      "page_recall": 0.5,
-      "page_mrr": 1.0,
-      "context_precision": 0.33,
-      "context_recall": 1.0,
-      "faithfulness": 0.5,
-      "response_relevance": 1.0,
+      "response_relevance": 0.0,
       "declined": false,
-      "cp_reason": "2 of 6 chunks relevant.",
-      "cr_reason": "Both statements in the reference answer are directly echoed in the retrieved context (see excerpt\u202f[1]), which mentions t",
-      "faith_reason": "The answer correctly notes that the book mentions centenarians celebrating birthdays (supported by [1] and [2]), but the",
-      "rel_reason": "The answer directly states that the centenarians celebrated birthdays, which fully answers the question.",
-      "answer_preview": "The authors note that the elders in the village spend their time **celebrating birthdays**\u2014for example, they marked a 99\u2011year\u2011old woman\u2019s birthday, a 94\u2011year\u2011old woman\u2019s birthday and even an \u201cyoung ma"
-    },
-    {
-      "question": "What does ikigai bring to a person's life according to the book?",
-      "off_topic": false,
-      "expected_pages": [
-        12,
-        13
-      ],
-      "retrieved_pages": [
-        14,
-        114,
-        13,
-        115,
-        113
-      ],
-      "page_hit_rate": 1.0,
-      "page_recall": 0.5,
-      "page_mrr": 0.3333333333333333,
-      "context_precision": 0.67,
-      "context_recall": 0.5,
-      "faithfulness": 0.5,
-      "response_relevance": 1.0,
-      "declined": false,
-      "cp_reason": "Chunks 2,\u202f3,\u202f4 and\u202f6 discuss the benefits ikigai provides (meaning, happiness, flow, fulfillment), while 1 and\u202f5 do not.",
-      "cr_reason": "The first sentence is directly supported by excerpt [3] (\u201cHaving a clearly defined ikigai brings satisfaction, happiness",
-      "faith_reason": "Some statements (e.g., satisfaction, happiness, meaning and the happy flow state) are directly quoted from the context, ",
-      "rel_reason": "The answer directly lists the benefits ikigai provides\u2014purpose, meaning, satisfaction, happiness, health, and longevity\u2014",
-      "answer_preview": "The book says that discovering and living your\u202fikigai gives you **purpose and meaning** that shape each day, and that this purpose translates into a range of benefits:  * **Satisfaction, happiness and"
+      "cp_reason": "off-topic, should have declined",
+      "cr_reason": "off-topic, should have declined",
+      "faith_reason": "The answer correctly states that the provided excerpts contain no information about baking sourdough bread, which is acc",
+      "rel_reason": "The answer does not provide any instructions or information on baking sourdough bread; it merely states a lack of source",
+      "answer_preview": "The provided excerpts contain no information about baking sourdough bread, so I cannot answer that question based on the given documents."
     }
   ]
 }

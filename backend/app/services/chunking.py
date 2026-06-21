@@ -99,6 +99,8 @@ _BOILERPLATE_MARKERS = (
     "for further reading",
     "works cited",
     "references\n",
+    "about the author",
+    "acknowledgments",
 )
 
 
@@ -123,6 +125,23 @@ def _looks_like_citation_list(content: str) -> bool:
     return citation_lines >= 3 and citation_lines >= len(lines) * 0.4
 
 
+def _looks_like_footnotes(content: str) -> bool:
+    """Detect a footnotes/endnotes page: lines that start with '- 1', '- 2',
+    etc. followed by author/title text. Ikigai's endnotes look like:
+        '- 1 Dan Buettner. The Blue Zones: Lessons for Living Longer...'
+        '- 1 Eduard Punset. Interview with Shlomo Breznitz...'
+    These embed close to topical queries (they contain the keywords + author
+    names) but add no answer value. Heuristic: >=3 lines matching the
+    footnote-number pattern."""
+    import re
+
+    # Match '- 1' or '- 12' at start of a line (after stripping).
+    footnote_re = re.compile(r"^-\s*\d+\s+\S")
+    lines = [ln.strip() for ln in content.splitlines() if len(ln.strip()) > 15]
+    footnote_lines = sum(1 for ln in lines if footnote_re.match(ln))
+    return footnote_lines >= 3 and footnote_lines >= len(lines) * 0.5
+
+
 def _is_boilerplate(content: str) -> bool:
     """Heuristic: is this chunk publishers'-office noise we shouldn't index?
 
@@ -143,7 +162,11 @@ def _is_boilerplate(content: str) -> bool:
     flat_markers = tuple(" ".join(m.split()) for m in _BOILERPLATE_MARKERS)
     if any(marker in low_flat for marker in flat_markers):
         return True
-    return _looks_like_citation_list(content) or _looks_like_toc(content)
+    return (
+        _looks_like_citation_list(content)
+        or _looks_like_toc(content)
+        or _looks_like_footnotes(content)
+    )
 
 
 def _looks_like_toc(content: str) -> bool:
