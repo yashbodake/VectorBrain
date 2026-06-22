@@ -7,6 +7,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections import defaultdict
 
@@ -87,10 +88,11 @@ async def generate_summaries(
     if not sections:
         raise HTTPException(status_code=400, detail="Could not build sections from chunks.")
 
-    # Summarize each section via the LLM (blocking — worker thread).
-    def _summarize_all():
-        out = []
-        for s in sections:
+    # Summarize each section via the LLM. Run them CONCURRENTLY (each in its own
+    # worker thread) so a 123-page book (13 sections) finishes in ~15s instead
+    # of ~4min (sequential). This also keeps us well under browser HTTP timeouts.
+    async def _summarize_one(s):
+        def _work():
             try:
                 summary = summaries_service.summarize_section(
                     s["content"], s["page_start"], s["page_end"]
@@ -98,14 +100,12 @@ async def generate_summaries(
             except RuntimeError as exc:
                 logger.warning("Section summary failed (p.%s-%s): %s", s["page_start"], s["page_end"], exc)
                 summary = f"(Summary unavailable for pages {s['page_start']}-{s['page_end']})"
-            title = summaries_service.make_section_title(
-                s["content"], s["page_start"], s["page_end"]
-            )
-            out.append({**s, "summary": summary, "title": title})
-        return out
+            title = summaries_service.make_section_title(s["content"], s["page_start"], s["page_end"])
+            return {**s, "summary": summary, "title": title}
+        return await anyio.to_thread.run_sync(_work)
 
     try:
-        summarized = await anyio.to_thread.run_sync(_summarize_all)
+        summarized = await asyncio.gather(*[_summarize_one(s) for s in sections])
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

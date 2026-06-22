@@ -33,12 +33,36 @@ async function generate() {
   generating.value = true
   error.value = null
   try {
-    summaries.value = await generateSummaries(props.documentId)
+    // Fire-and-forget the POST (it may take minutes on large docs and the
+    // browser will timeout the HTTP request). We don't await the response —
+    // instead we poll GET /summaries until results appear.
+    generateSummaries(props.documentId).catch(() => {})
+    // Start polling for results.
+    await pollForResults()
   } catch (e) {
     error.value = e?.response?.data?.detail || 'Failed to generate summaries.'
   } finally {
     generating.value = false
   }
+}
+
+// Poll GET /summaries every 5s until the backend finishes generating.
+// Times out after 5 min (worst case for a 200-page book).
+async function pollForResults() {
+  const maxAttempts = 60  // 60 × 5s = 5 min
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(resolve => setTimeout(resolve, 5000))
+    try {
+      const result = await getSummaries(props.documentId)
+      if (result.length > 0) {
+        summaries.value = result
+        return
+      }
+    } catch {
+      // keep polling
+    }
+  }
+  throw new Error('Timed out waiting for summaries (try again or check backend).')
 }
 </script>
 
