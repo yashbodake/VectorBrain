@@ -16,6 +16,7 @@ from app.api.chat_history import (
 )
 from app.api.documents import router as documents_router
 from app.api.quiz import router as quiz_router
+from app.api.summaries import router as summaries_router
 from app.core.config import settings
 
 
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
     app.include_router(chat_history_router, prefix="/api")
     app.include_router(chat_sessions_router, prefix="/api")
     app.include_router(quiz_router, prefix="/api")
+    app.include_router(summaries_router, prefix="/api")
 
     @app.get("/health", tags=["meta"])
     async def health() -> dict[str, str]:

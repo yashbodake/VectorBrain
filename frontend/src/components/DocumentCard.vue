@@ -14,7 +14,7 @@ const props = defineProps({
   document: { type: Object, required: true },
 })
 
-const emit = defineEmits(['delete', 'quiz'])
+const emit = defineEmits(['delete', 'quiz', 'summarize'])
 
 const documents = useDocumentsStore()
 
@@ -71,6 +71,10 @@ function resetConfirm() {
 function startQuiz() {
   emit('quiz', doc.value.id, doc.value.filename)
 }
+// Summary: emit a 'summarize' event for the modal.
+function startSummary() {
+  emit('summarize', doc.value.id, doc.value.filename)
+}
 </script>
 
 <template>
@@ -114,6 +118,14 @@ function startQuiz() {
         @click="startQuiz"
       >
         📋
+      </button>
+      <button
+        v-if="isReady"
+        class="quiz-btn"
+        title="Generate chapter summaries"
+        @click="startSummary"
+      >
+        📖
       </button>
       <button
         class="delete-btn"

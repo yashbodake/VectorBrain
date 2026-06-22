@@ -89,6 +89,17 @@ export async function getQuizScore(documentId) {
   return data
 }
 
+// --- Chapter summaries (cached per-section overviews) ----------------------
+export async function generateSummaries(documentId) {
+  const { data } = await http.post(`/api/documents/${documentId}/summarize`)
+  return data
+}
+
+export async function getSummaries(documentId) {
+  const { data } = await http.get(`/api/documents/${documentId}/summaries`)
+  return data
+}
+
 // --- Chat (SSE over POST) ----------------------------------------------------
 // Parses the SSE stream from POST /api/chat manually. Why not EventSource?
 // EventSource only supports GET; our endpoint is POST with a JSON body, so we

@@ -183,3 +183,28 @@ class QuizAttempt(Base):
 
 Index("quiz_questions_document_id_idx", QuizQuestion.document_id)
 Index("quiz_attempts_quiz_question_id_idx", QuizAttempt.quiz_question_id)
+
+
+# ---------------------------------------------------------------------------
+# Chapter summaries (cached per-section overviews for quick review)
+# ---------------------------------------------------------------------------
+class DocumentSummary(Base):
+    __tablename__ = "document_summaries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    section_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    page_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    page_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+Index("document_summaries_document_id_idx", DocumentSummary.document_id)

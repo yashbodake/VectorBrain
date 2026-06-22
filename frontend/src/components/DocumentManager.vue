@@ -9,17 +9,26 @@ import { useDocumentsStore } from '../stores/documents'
 import DocumentCard from './DocumentCard.vue'
 import FileUploader from './FileUploader.vue'
 import QuizPanel from './QuizPanel.vue'
+import SummaryPanel from './SummaryPanel.vue'
 
 const store = useDocumentsStore()
 const { documents, loading, error, hasProcessingDocuments } = storeToRefs(store)
 
 // Quiz modal state: when set, the QuizPanel modal is shown.
 const quizTarget = ref(null) // { id, filename } | null
+const summaryTarget = ref(null)
+
 function onQuiz(id, filename) {
   quizTarget.value = { id, filename }
 }
 function closeQuiz() {
   quizTarget.value = null
+}
+function onSummary(id, filename) {
+  summaryTarget.value = { id, filename }
+}
+function closeSummary() {
+  summaryTarget.value = null
 }
 
 let pollTimer = null
@@ -85,6 +94,7 @@ async function onDelete(id) {
         :document="doc"
         @delete="onDelete"
         @quiz="onQuiz"
+        @summarize="onSummary"
       />
     </div>
 
@@ -97,6 +107,17 @@ async function onDelete(id) {
           :document-id="quizTarget.id"
           :filename="quizTarget.filename"
           @close="closeQuiz"
+        />
+      </div>
+    </Teleport>
+
+    <!-- Summary modal overlay -->
+    <Teleport to="body">
+      <div v-if="summaryTarget" class="quiz-overlay" @click.self="closeSummary">
+        <SummaryPanel
+          :document-id="summaryTarget.id"
+          :filename="summaryTarget.filename"
+          @close="closeSummary"
         />
       </div>
     </Teleport>
