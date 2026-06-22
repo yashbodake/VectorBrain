@@ -65,6 +65,7 @@ class ChatMessageBatch(BaseModel):
     """POST /api/chat/history body: a batch of messages to persist."""
 
     messages: list[ChatMessageCreate]
+    session_id: int = Field(default=1, description="Which session to save to.")
 
 
 class ChatMessageRead(BaseModel):
@@ -73,7 +74,29 @@ class ChatMessageRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    session_id: int
     role: str
     content: str
     citations: list[dict] | None = None
     created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Chat sessions (session travel) — multiple independent threads
+# ---------------------------------------------------------------------------
+class ChatSessionRead(BaseModel):
+    """One session as returned by GET /api/chat/sessions."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    created_at: datetime
+    updated_at: datetime | None = None
+    message_count: int = 0
+
+
+class ChatSessionCreate(BaseModel):
+    """POST /api/chat/sessions body (title is optional — auto-titled later)."""
+
+    title: str = Field(default="New session")

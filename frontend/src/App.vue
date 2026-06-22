@@ -1,8 +1,9 @@
 <script setup>
-// App shell: header + two-panel layout (DocumentManager left, ChatInterface
-// right) per docs/06. No business logic here — state lives in the Pinia stores.
+// App shell: header + three-panel layout (DocumentManager | SessionSidebar |
+// ChatInterface). No business logic here — state lives in the Pinia stores.
 
 import DocumentManager from './components/DocumentManager.vue'
+import SessionSidebar from './components/SessionSidebar.vue'
 import ChatInterface from './components/ChatInterface.vue'
 </script>
 
@@ -21,6 +22,9 @@ import ChatInterface from './components/ChatInterface.vue'
     <main class="layout">
       <aside class="panel panel-docs">
         <DocumentManager />
+      </aside>
+      <aside class="panel panel-sessions">
+        <SessionSidebar />
       </aside>
       <section class="panel panel-chat">
         <ChatInterface />
@@ -60,7 +64,7 @@ import ChatInterface from './components/ChatInterface.vue'
 .layout {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(320px, 30%) 1fr;
+  grid-template-columns: minmax(260px, 22%) minmax(180px, 16%) 1fr;
   gap: 0;
   min-height: 0; /* allow children to scroll */
 }
@@ -75,11 +79,23 @@ import ChatInterface from './components/ChatInterface.vue'
   border-right: 1px solid var(--border, #e2e6ee);
   background: var(--panel-bg, #fafbfd);
 }
+.panel-sessions {
+  border-right: 1px solid var(--border, #e2e6ee);
+  background: var(--panel-bg, #fafbfd);
+}
 .panel-chat {
   background: #fff;
 }
 
-/* Responsive: stack panels on narrow screens. */
+/* Responsive: hide session sidebar on narrow screens. */
+@media (max-width: 1024px) {
+  .layout {
+    grid-template-columns: minmax(240px, 25%) 1fr;
+  }
+  .panel-sessions {
+    display: none;
+  }
+}
 @media (max-width: 820px) {
   .layout {
     grid-template-columns: 1fr;

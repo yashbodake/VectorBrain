@@ -19,7 +19,8 @@ export const useChatStore = defineStore('chat', {
   state: () => ({
     messages: [], // [{ id, role, content, citations, sources, isStreaming, error }]
     currentController: null, // AbortController for the in-flight stream
-    historyLoaded: false, // true after the first loadHistory() call
+    currentSessionId: 1, // the active chat session (session travel)
+    historyLoaded: false, // true after the first loadHistory() for current session
   }),
 
   getters: {
@@ -28,14 +29,20 @@ export const useChatStore = defineStore('chat', {
   },
 
   actions: {
-    // Load persisted chat from the DB. Called once on mount. Maps DB rows to
-    // the store's message shape (restores citations for hover popups + chips).
+    // Switch to a different session: clear the UI, mark history as unloaded,
+    // load the new session's messages.
+    async switchSession(sessionId) {
+      this.currentSessionId = sessionId
+      this.messages = []
+      this.historyLoaded = false
+      await this.loadHistory()
+    },
+
+    // Load persisted chat from the DB for the current session.
     async loadHistory() {
       if (this.historyLoaded) return
       try {
-        const rows = await loadChatHistory()
-        // Map DB rows → store message objects. DB citations map to BOTH
-        // citations (per-chunk for inline [n]) and sources (for chips).
+        const rows = await loadChatHistory(this.currentSessionId)
         this.messages = rows.map((r) => ({
           id: makeId(),
           role: r.role,
@@ -121,16 +128,39 @@ export const useChatStore = defineStore('chat', {
     // message was already shown; only persistence is lost (not the current session).
     async _persistTurn(userMsg, assistantMsg) {
       try {
-        await saveChatMessages([
-          { role: userMsg.role, content: userMsg.content, citations: null },
-          {
-            role: assistantMsg.role,
-            content: assistantMsg.content,
-            citations: assistantMsg.citations || null,
-          },
-        ])
+        await saveChatMessages(
+          [
+            { role: userMsg.role, content: userMsg.content, citations: null },
+            {
+              role: assistantMsg.role,
+              content: assistantMsg.content,
+              citations: assistantMsg.citations || null,
+            },
+          ],
+          this.currentSessionId,
+        )
+        // Auto-title the session if it's still the default "New session".
+        // Uses the first user message as the title (truncated).
+        await this._maybeAutoTitle(userMsg.content)
       } catch (e) {
         console.error('[chat] persist failed (non-blocking):', e)
+      }
+    },
+
+    // If the current session's title is still the default, rename it to the
+    // first question (truncated). Updates both the backend and the sessions
+    // store so the sidebar reflects it immediately.
+    async _maybeAutoTitle(firstQuestion) {
+      try {
+        const { useSessionsStore } = await import('./sessions')
+        const sessions = useSessionsStore()
+        const current = sessions.sessions.find((s) => s.id === this.currentSessionId)
+        if (current && (current.title === 'New session' || !current.title)) {
+          const newTitle = firstQuestion.slice(0, 60) + (firstQuestion.length > 60 ? '…' : '')
+          await sessions.rename(this.currentSessionId, newTitle)
+        }
+      } catch (e) {
+        // Non-blocking — title is cosmetic.
       }
     },
 
@@ -143,7 +173,7 @@ export const useChatStore = defineStore('chat', {
     async clearHistory() {
       this.cancel()
       try {
-        await clearChatHistory()
+        await clearChatHistory(this.currentSessionId)
       } catch (e) {
         console.error('[chat] clearHistory failed:', e)
       }

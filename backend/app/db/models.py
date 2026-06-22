@@ -91,14 +91,36 @@ Index(
 
 
 # ---------------------------------------------------------------------------
-# Chat history (session memory) — see docs/superpowers/specs/2026-06-21-
-# session-memory-design.md. Stores every message so the conversation survives
-# refresh / browser clear / backend restart.
+# Chat history (session memory + session travel). Stores every message so the
+# conversation survives refresh / browser clear / backend restart. Session
+# travel: each message belongs to a chat_session (multiple independent threads).
 # ---------------------------------------------------------------------------
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="New session")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    messages: Mapped[list[ChatMessage]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     role: Mapped[str] = mapped_column(String(20), nullable=False)  # 'user' | 'assistant'
     content: Mapped[str] = mapped_column(Text, nullable=False)
     # JSONB: [{filename, page_number, excerpt}, ...] for assistant messages; NULL for user.
@@ -106,3 +128,8 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+    session: Mapped[ChatSession] = relationship(back_populates="messages")
+
+
+Index("chat_messages_session_id_idx", ChatMessage.session_id)

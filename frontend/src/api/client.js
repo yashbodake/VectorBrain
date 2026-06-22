@@ -35,17 +35,37 @@ export async function deleteDocument(id) {
 }
 
 // --- Chat history (session memory) -----------------------------------------
-export async function loadChatHistory() {
-  const { data } = await http.get('/api/chat/history')
+export async function loadChatHistory(sessionId = 1) {
+  const { data } = await http.get('/api/chat/history', { params: { session_id: sessionId } })
   return data.messages
 }
 
-export async function saveChatMessages(messages) {
-  await http.post('/api/chat/history', { messages })
+export async function saveChatMessages(messages, sessionId = 1) {
+  await http.post('/api/chat/history', { messages, session_id: sessionId })
 }
 
-export async function clearChatHistory() {
-  await http.delete('/api/chat/history')
+export async function clearChatHistory(sessionId = 1) {
+  await http.delete('/api/chat/history', { params: { session_id: sessionId } })
+}
+
+// --- Chat sessions (session travel) ----------------------------------------
+export async function listSessions() {
+  const { data } = await http.get('/api/chat/sessions')
+  return data.sessions
+}
+
+export async function createSession(title = 'New session') {
+  const { data } = await http.post('/api/chat/sessions', { title })
+  return data
+}
+
+export async function renameSession(id, title) {
+  const { data } = await http.patch(`/api/chat/sessions/${id}`, { title })
+  return data
+}
+
+export async function deleteSession(id) {
+  await http.delete(`/api/chat/sessions/${id}`)
 }
 
 // --- Chat (SSE over POST) ----------------------------------------------------
