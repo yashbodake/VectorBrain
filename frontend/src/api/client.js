@@ -68,6 +68,27 @@ export async function deleteSession(id) {
   await http.delete(`/api/chat/sessions/${id}`)
 }
 
+// --- Quiz (active recall study tool) ---------------------------------------
+export async function generateQuiz(documentId, n = 5) {
+  const { data } = await http.post(`/api/documents/${documentId}/quiz`, null, { params: { n } })
+  return data
+}
+
+export async function getQuiz(documentId) {
+  const { data } = await http.get(`/api/documents/${documentId}/quiz`)
+  return data
+}
+
+export async function answerQuizQuestion(questionId, selectedIndex) {
+  const { data } = await http.post(`/api/quiz/${questionId}/answer`, { selected_index: selectedIndex })
+  return data
+}
+
+export async function getQuizScore(documentId) {
+  const { data } = await http.get('/api/quiz/score', { params: { document_id: documentId } })
+  return data
+}
+
 // --- Chat (SSE over POST) ----------------------------------------------------
 // Parses the SSE stream from POST /api/chat manually. Why not EventSource?
 // EventSource only supports GET; our endpoint is POST with a JSON body, so we

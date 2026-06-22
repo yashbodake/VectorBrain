@@ -3,14 +3,24 @@
 // pending (uploaded/processing) and stops once everything reaches a terminal
 // state — never polls forever (docs/06).
 
-import { onMounted, onUnmounted, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useDocumentsStore } from '../stores/documents'
 import DocumentCard from './DocumentCard.vue'
 import FileUploader from './FileUploader.vue'
+import QuizPanel from './QuizPanel.vue'
 
 const store = useDocumentsStore()
 const { documents, loading, error, hasProcessingDocuments } = storeToRefs(store)
+
+// Quiz modal state: when set, the QuizPanel modal is shown.
+const quizTarget = ref(null) // { id, filename } | null
+function onQuiz(id, filename) {
+  quizTarget.value = { id, filename }
+}
+function closeQuiz() {
+  quizTarget.value = null
+}
 
 let pollTimer = null
 
@@ -74,14 +84,32 @@ async function onDelete(id) {
         :key="doc.id"
         :document="doc"
         @delete="onDelete"
+        @quiz="onQuiz"
       />
     </div>
 
     <FileUploader />
+
+    <!-- Quiz modal overlay -->
+    <Teleport to="body">
+      <div v-if="quizTarget" class="quiz-overlay" @click.self="closeQuiz">
+        <QuizPanel
+          :document-id="quizTarget.id"
+          :filename="quizTarget.filename"
+          @close="closeQuiz"
+        />
+      </div>
+    </Teleport>
   </section>
 </template>
 
 <style scoped>
+.quiz-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  z-index: 99;
+}
 .doc-manager {
   display: flex;
   flex-direction: column;

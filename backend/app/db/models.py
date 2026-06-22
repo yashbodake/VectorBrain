@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -133,3 +133,53 @@ class ChatMessage(Base):
 
 
 Index("chat_messages_session_id_idx", ChatMessage.session_id)
+
+
+# ---------------------------------------------------------------------------
+# Quiz (active recall study tool)
+# ---------------------------------------------------------------------------
+class QuizQuestion(Base):
+    __tablename__ = "quiz_questions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    # JSONB: ["option A", "option B", ...]
+    options: Mapped[list] = mapped_column(JSONB, nullable=False)
+    correct_index: Mapped[int] = mapped_column(Integer, nullable=False)  # 0-based
+    explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    attempts: Mapped[list[QuizAttempt]] = relationship(
+        back_populates="question",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class QuizAttempt(Base):
+    __tablename__ = "quiz_attempts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    quiz_question_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("quiz_questions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    selected_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    attempted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    question: Mapped[QuizQuestion] = relationship(back_populates="attempts")
+
+
+Index("quiz_questions_document_id_idx", QuizQuestion.document_id)
+Index("quiz_attempts_quiz_question_id_idx", QuizAttempt.quiz_question_id)

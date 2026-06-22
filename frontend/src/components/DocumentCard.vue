@@ -14,7 +14,7 @@ const props = defineProps({
   document: { type: Object, required: true },
 })
 
-const emit = defineEmits(['delete'])
+const emit = defineEmits(['delete', 'quiz'])
 
 const documents = useDocumentsStore()
 
@@ -66,6 +66,11 @@ function confirmDelete() {
 function resetConfirm() {
   confirming.value = false
 }
+
+// Quiz: emit a 'quiz' event so the parent (DocumentManager) can open the modal.
+function startQuiz() {
+  emit('quiz', doc.value.id, doc.value.filename)
+}
 </script>
 
 <template>
@@ -102,6 +107,14 @@ function resetConfirm() {
       <span class="badge" :class="`badge-${doc.status}`">
         {{ doc.status }}
       </span>
+      <button
+        v-if="isReady"
+        class="quiz-btn"
+        title="Generate a quiz from this document"
+        @click="startQuiz"
+      >
+        📋
+      </button>
       <button
         class="delete-btn"
         :class="{ confirming }"
@@ -202,6 +215,18 @@ function resetConfirm() {
   padding: 0.1rem 0.35rem;
   border-radius: 0.3rem;
   transition: background 0.15s, color 0.15s;
+}
+.quiz-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.3rem;
+  transition: background 0.15s;
+}
+.quiz-btn:hover {
+  background: var(--accent-soft, #e7eefd);
 }
 .delete-btn:hover {
   background: #fee2e2;
