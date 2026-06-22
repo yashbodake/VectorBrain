@@ -3,17 +3,23 @@
 // A message object: { id, role: 'user'|'assistant', content, citations, isStreaming, error }
 // The assistant message is created empty with isStreaming:true, then filled in
 // as token events arrive — that's what makes the answer appear live.
+//
+// SESSION MEMORY: messages persist to the DB via /api/chat/history. On mount,
+// loadHistory() restores the conversation. After each Q&A turn, both messages
+// (user + assistant with citations) are saved. See docs/superpowers/specs/
+// 2026-06-21-session-memory-design.md.
 
 import { defineStore } from 'pinia'
-import { streamChat } from '../api/client'
+import { streamChat, loadChatHistory, saveChatMessages, clearChatHistory } from '../api/client'
 
 let nextId = 1
 const makeId = () => nextId++
 
 export const useChatStore = defineStore('chat', {
   state: () => ({
-    messages: [], // [{ id, role, content, citations, isStreaming, error }]
+    messages: [], // [{ id, role, content, citations, sources, isStreaming, error }]
     currentController: null, // AbortController for the in-flight stream
+    historyLoaded: false, // true after the first loadHistory() call
   }),
 
   getters: {
@@ -22,33 +28,56 @@ export const useChatStore = defineStore('chat', {
   },
 
   actions: {
+    // Load persisted chat from the DB. Called once on mount. Maps DB rows to
+    // the store's message shape (restores citations for hover popups + chips).
+    async loadHistory() {
+      if (this.historyLoaded) return
+      try {
+        const rows = await loadChatHistory()
+        // Map DB rows → store message objects. DB citations map to BOTH
+        // citations (per-chunk for inline [n]) and sources (for chips).
+        this.messages = rows.map((r) => ({
+          id: makeId(),
+          role: r.role,
+          content: r.content,
+          citations: r.citations || [],
+          sources: r.citations || [],
+          isStreaming: false,
+          error: null,
+        }))
+      } catch (e) {
+        // History load failed — start fresh (chat still works, just no history).
+        console.error('[chat] loadHistory failed:', e)
+      } finally {
+        this.historyLoaded = true
+      }
+    },
+
     async sendMessage(question) {
       // 1. push the user message
-      this.messages.push({
+      const userMsg = {
         id: makeId(),
         role: 'user',
         content: question,
         citations: [],
         isStreaming: false,
         error: null,
-      })
+      }
+      this.messages.push(userMsg)
 
       // 2. push an empty assistant message, streaming
       const assistant = {
         id: makeId(),
         role: 'assistant',
         content: '',
-        citations: [], // per-chunk (inline [n] lookup)
-        sources: [], // deduped per-(filename,page) for the chips below
+        citations: [],
+        sources: [],
         isStreaming: true,
         error: null,
       }
       this.messages.push(assistant)
 
-      // 3-6. open SSE, handle token/done/error. Scope the query to the docs
-      // the user has selected (Feature 3). The documents store holds the
-      // current selection; an empty selection still sends (backend will reply
-      // with the "no documents ready" decline).
+      // 3. scope the query to selected docs (Feature 3)
       const { useDocumentsStore } = await import('./documents')
       const documentsStore = useDocumentsStore()
       const scopeIds = documentsStore.selectedReadyIds
@@ -59,29 +88,26 @@ export const useChatStore = defineStore('chat', {
         {
           onToken: (text) => {
             tokenCount += 1
-            // DEBUG: prove tokens reach the store. Check browser console.
-            console.log(`[chat] onToken #${tokenCount}:`, JSON.stringify(text))
             assistant.content += text
-            // Force Pinia to notice the nested mutation on some Vue versions.
             this.messages = [...this.messages]
           },
           onCitations: (citations, sources) => {
-            console.log('[chat] onCitations:', citations, sources)
             assistant.citations = citations
             assistant.sources = sources || []
             assistant.isStreaming = false
             this.messages = [...this.messages]
+            // Persist both messages now that the answer is complete.
+            this._persistTurn(userMsg, assistant)
           },
           onError: (message) => {
             console.error('[chat] onError:', message)
             assistant.error = message
             assistant.isStreaming = false
             this.messages = [...this.messages]
+            // Still persist — the user saw an error message, keep it in history.
+            this._persistTurn(userMsg, assistant)
           },
           onFinally: () => {
-            console.log('[chat] onFinally. total tokens:', tokenCount)
-            // If we never got a done/error event (e.g. aborted or stream cut),
-            // still clear isStreaming so the UI isn't stuck "typing" forever.
             assistant.isStreaming = false
             this.currentController = null
             this.messages = [...this.messages]
@@ -91,15 +117,42 @@ export const useChatStore = defineStore('chat', {
       )
     },
 
+    // Save a user+assistant pair to the DB. Fire-and-forget — if it fails, the
+    // message was already shown; only persistence is lost (not the current session).
+    async _persistTurn(userMsg, assistantMsg) {
+      try {
+        await saveChatMessages([
+          { role: userMsg.role, content: userMsg.content, citations: null },
+          {
+            role: assistantMsg.role,
+            content: assistantMsg.content,
+            citations: assistantMsg.citations || null,
+          },
+        ])
+      } catch (e) {
+        console.error('[chat] persist failed (non-blocking):', e)
+      }
+    },
+
     cancel() {
-      // User-initiated stop on the in-flight answer.
       this.currentController?.abort()
       this.currentController = null
     },
 
-    clear() {
+    // Clear all history from DB + UI. Called by the "Clear chat" button.
+    async clearHistory() {
       this.cancel()
+      try {
+        await clearChatHistory()
+      } catch (e) {
+        console.error('[chat] clearHistory failed:', e)
+      }
       this.messages = []
+    },
+
+    // Legacy alias (clear() is used by some old callers).
+    clear() {
+      return this.clearHistory()
     },
   },
 })

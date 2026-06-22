@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ChatRequest(BaseModel):
@@ -45,3 +47,33 @@ class ChatRequest(BaseModel):
 class Citation(BaseModel):
     filename: str
     page_number: int | None = None
+
+
+# ---------------------------------------------------------------------------
+# Chat history (session memory) — see docs/superpowers/specs/2026-06-21-
+# session-memory-design.md
+# ---------------------------------------------------------------------------
+class ChatMessageCreate(BaseModel):
+    """One message to save. Used in the batch POST."""
+
+    role: str = Field(..., description="'user' or 'assistant'")
+    content: str = Field(...)
+    citations: list[dict] | None = Field(default=None)
+
+
+class ChatMessageBatch(BaseModel):
+    """POST /api/chat/history body: a batch of messages to persist."""
+
+    messages: list[ChatMessageCreate]
+
+
+class ChatMessageRead(BaseModel):
+    """One message as returned by GET /api/chat/history."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    role: str
+    content: str
+    citations: list[dict] | None = None
+    created_at: datetime

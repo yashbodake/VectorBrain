@@ -11,6 +11,7 @@ from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -87,3 +88,21 @@ Index(
     postgresql_with={"m": 16, "ef_construction": 64},
     postgresql_ops={"embedding": "vector_cosine_ops"},
 )
+
+
+# ---------------------------------------------------------------------------
+# Chat history (session memory) — see docs/superpowers/specs/2026-06-21-
+# session-memory-design.md. Stores every message so the conversation survives
+# refresh / browser clear / backend restart.
+# ---------------------------------------------------------------------------
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # 'user' | 'assistant'
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    # JSONB: [{filename, page_number, excerpt}, ...] for assistant messages; NULL for user.
+    citations: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

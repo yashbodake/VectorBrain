@@ -34,6 +34,20 @@ export async function deleteDocument(id) {
   await http.delete(`/api/documents/${id}`)
 }
 
+// --- Chat history (session memory) -----------------------------------------
+export async function loadChatHistory() {
+  const { data } = await http.get('/api/chat/history')
+  return data.messages
+}
+
+export async function saveChatMessages(messages) {
+  await http.post('/api/chat/history', { messages })
+}
+
+export async function clearChatHistory() {
+  await http.delete('/api/chat/history')
+}
+
 // --- Chat (SSE over POST) ----------------------------------------------------
 // Parses the SSE stream from POST /api/chat manually. Why not EventSource?
 // EventSource only supports GET; our endpoint is POST with a JSON body, so we

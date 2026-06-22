@@ -17,6 +17,7 @@ const { readyDocumentCount, selectedReadyIds } = storeToRefs(documents)
 
 const input = ref('')
 const threadEl = ref(null)
+const confirmingClear = ref(false)
 
 const readyCount = computed(() => readyDocumentCount.value)
 const selectedCount = computed(() => selectedReadyIds.value.length)
@@ -33,6 +34,8 @@ const canSend = computed(
 // that left the store empty). Belt-and-suspenders for the disabled-input case.
 onMounted(() => {
   if (!documents.documents.length) documents.fetchDocuments()
+  // Load persisted chat history from the DB (session memory).
+  chat.loadHistory()
 })
 
 const placeholder = computed(() => {
@@ -53,13 +56,20 @@ async function send() {
 }
 
 function onEnter(e) {
-  // Only intercept the Enter key. Shift+Enter = newline (let it through).
-  // CRITICAL: without the key check this fires on EVERY keydown and
-  // preventDefault() eats every character the user types.
   if (e.key !== 'Enter') return
   if (e.shiftKey) return
   e.preventDefault()
   send()
+}
+
+// Clear chat with a two-stage confirm (don't wipe on a misclick).
+async function doClear() {
+  if (!confirmingClear.value) {
+    confirmingClear.value = true
+    return
+  }
+  confirmingClear.value = false
+  await chat.clearHistory()
 }
 
 // Auto-scroll to the newest content as it streams in.
@@ -82,6 +92,17 @@ void debugDocs
 
 <template>
   <section class="chat">
+    <!-- Chat header: clear button (only when there are messages) -->
+    <div v-if="messages.length" class="chat-header">
+      <button
+        class="clear-btn"
+        :class="{ confirming: confirmingClear }"
+        @click="doClear"
+        @mouseleave="confirmingClear = false"
+      >
+        {{ confirmingClear ? 'Confirm clear?' : '🗑 Clear chat' }}
+      </button>
+    </div>
     <div ref="threadEl" class="thread">
       <div v-if="!messages.length" class="empty-chat">
         <div class="empty-avatar">🧠</div>
@@ -138,6 +159,31 @@ void debugDocs
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+.chat-header {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 0.4rem;
+}
+.clear-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted, #9aa3b2);
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.35rem;
+  transition: background 0.15s, color 0.15s;
+}
+.clear-btn:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.clear-btn.confirming {
+  background: #dc2626;
+  color: #fff;
+  font-weight: 600;
 }
 .thread {
   flex: 1;
