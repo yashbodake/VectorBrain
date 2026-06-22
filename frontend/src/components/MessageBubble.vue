@@ -99,10 +99,10 @@ onBeforeUnmount(() => document.removeEventListener('click', onGlobalClick))
 <template>
   <div class="msg" :class="role">
     <div class="msg-avatar" aria-hidden="true">
-      {{ role === 'user' ? '🧑' : '🤖' }}
+      {{ role === 'user' ? '🧑' : '🧠' }}
     </div>
     <div class="msg-body">
-      <div class="meta">{{ role === 'user' ? 'You' : 'Assistant' }}</div>
+      <div class="meta">{{ role === 'user' ? 'You' : 'VectorBrain' }}</div>
 
       <!-- Content. Assistant answers are markdown -> sanitized HTML; user
            messages stay plain text (short, no formatting expected). Inline

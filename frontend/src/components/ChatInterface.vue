@@ -84,7 +84,9 @@ void debugDocs
   <section class="chat">
     <div ref="threadEl" class="thread">
       <div v-if="!messages.length" class="empty-chat">
-        <p>Ask a question about your uploaded documents.</p>
+        <div class="empty-avatar">🧠</div>
+        <p class="empty-title">VectorBrain</p>
+        <p>Upload some PDFs and ask me anything — I'll answer with page-level citations.</p>
         <p class="hint" v-if="readyCount === 0">
           Waiting for at least one document to finish processing…
         </p>
@@ -151,6 +153,15 @@ void debugDocs
   text-align: center;
   color: var(--muted, #6b7280);
   gap: 0.4rem;
+}
+.empty-avatar {
+  font-size: 2.5rem;
+  margin-bottom: 0.3rem;
+}
+.empty-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text, #1f2533);
 }
 .empty-chat .hint { font-size: 0.8rem; opacity: 0.8; }
 
